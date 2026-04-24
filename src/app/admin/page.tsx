@@ -3,7 +3,8 @@
 import { useEffect, useState, useRef } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
-import { Shield, Plus, FileText, Users, ChevronDown, ChevronUp, Download, Save, Trash2, Edit3, HardDrive, Upload, X, Paperclip, Megaphone, Pin, Settings, FileDown, Activity, CheckCircle2, XCircle, Key } from 'lucide-react';
+import { Shield, Plus, FileText, Users, ChevronDown, ChevronUp, Download, Save, Trash2, Edit3, HardDrive, Upload, X, Paperclip, Megaphone, Pin, Settings, FileDown, Activity, CheckCircle2, XCircle, Key, Sparkles } from 'lucide-react';
+import MarkdownEditor from '@/components/MarkdownEditor';
 import { formatDate, getStatusLabel, getStatusColor, AWARD_OPTIONS, getAwardLabel, getAwardColor, GRADIENT_PRESETS, buildHeroGradient } from '@/lib/utils';
 
 function formatFileSize(bytes: number) {
@@ -15,7 +16,7 @@ function formatFileSize(bytes: number) {
 export default function AdminPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
-  const [tab, setTab] = useState<'competitions' | 'submissions' | 'users' | 'files' | 'announcements' | 'loginLogs' | 'settings'>('competitions');
+  const [tab, setTab] = useState<'competitions' | 'submissions' | 'users' | 'files' | 'announcements' | 'loginLogs' | 'cleanup' | 'settings'>('competitions');
   const [siteConfigForm, setSiteConfigForm] = useState({
     siteName: '', siteDesc: '', heroTitle: '', heroDesc: '', footerText: '', primaryColor: '#2563eb', secondaryColor: '', gradientEnabled: false, gradientAngle: 160, logoUrl: '', bannerText: '', bannerEnabled: false, maxFileSize: 10,
   });
@@ -370,6 +371,7 @@ export default function AdminPage() {
     { key: 'announcements' as const, label: '公告管理', icon: Megaphone, count: announcements.length },
     { key: 'files' as const, label: '文件存储', icon: HardDrive, count: files.totalCount || 0 },
     { key: 'loginLogs' as const, label: '登录日志', icon: Activity, count: loginLogs.length },
+    { key: 'cleanup' as const, label: '数据清理', icon: Sparkles, count: 0 },
     { key: 'settings' as const, label: '站点设置', icon: Settings, count: 0 },
   ];
 
@@ -462,10 +464,13 @@ export default function AdminPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">赛题详细内容</label>
-                  <textarea
-                    value={compForm.content} onChange={(e) => setCompForm({ ...compForm, content: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none" rows={8} required
+                  <label className="block text-sm font-medium text-gray-700 mb-1">赛题详细内容 <span className="text-xs text-gray-400 font-normal">（支持 Markdown）</span></label>
+                  <MarkdownEditor
+                    value={compForm.content}
+                    onChange={(v) => setCompForm({ ...compForm, content: v })}
+                    rows={10}
+                    required
+                    placeholder="支持 Markdown 语法。使用 #/##/### 标题, - 列表, **加粗**, `code`, 表格等"
                   />
                 </div>
                 <div>
@@ -1012,10 +1017,13 @@ export default function AdminPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">内容</label>
-                  <textarea
-                    value={annForm.content} onChange={(e) => setAnnForm({ ...annForm, content: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none" rows={6} required
+                  <label className="block text-sm font-medium text-gray-700 mb-1">内容 <span className="text-xs text-gray-400 font-normal">（支持 Markdown）</span></label>
+                  <MarkdownEditor
+                    value={annForm.content}
+                    onChange={(v) => setAnnForm({ ...annForm, content: v })}
+                    rows={6}
+                    required
+                    placeholder="支持 Markdown 语法..."
                   />
                 </div>
                 <div className="flex items-center gap-6">
@@ -1236,6 +1244,9 @@ export default function AdminPage() {
         </div>
       )}
 
+      {/* ===== 数据清理 ===== */}
+      {tab === 'cleanup' && <CleanupPanel onMessage={setMessage} />}
+
       {/* ===== 站点设置 ===== */}
       {tab === 'settings' && (
         <SiteSettingsPanel
@@ -1246,6 +1257,188 @@ export default function AdminPage() {
           setMessage={setMessage}
         />
       )}
+    </div>
+  );
+}
+
+function CleanupPanel({ onMessage }: { onMessage: (m: string) => void }) {
+  const [stats, setStats] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState<string | null>(null);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch('/api/admin/cleanup');
+      if (res.ok) setStats(await res.json());
+    } catch {}
+    setLoading(false);
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const exec = async (target: string, confirmMsg: string) => {
+    if (!confirm(confirmMsg)) return;
+    setBusy(target);
+    try {
+      const res = await fetch('/api/admin/cleanup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ target }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        const extra = data.freedBytes ? ` (释放 ${formatFileSize(data.freedBytes)})` : '';
+        onMessage(`清理成功：删除 ${data.deleted} 项${extra}`);
+        load();
+      } else {
+        onMessage(data.error || '清理失败');
+      }
+    } catch {
+      onMessage('清理失败');
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="text-center py-20">
+        <div className="w-8 h-8 border-2 border-gray-200 border-t-gray-500 rounded-full animate-spin mx-auto" />
+      </div>
+    );
+  }
+
+  if (!stats) {
+    return <p className="text-gray-400 text-center py-10">加载失败</p>;
+  }
+
+  const cards = [
+    {
+      key: 'orphan_files',
+      title: '孤立文件',
+      desc: '扫描 public/uploads 目录，删除不再被任何赛题或提交引用的文件（可能由用户删除提交后遗留）',
+      count: stats.orphanFiles.count,
+      detail: `共 ${formatFileSize(stats.orphanFiles.totalSize)}`,
+      btnLabel: '清理孤立文件',
+      confirmMsg: `确认删除 ${stats.orphanFiles.count} 个孤立文件（${formatFileSize(stats.orphanFiles.totalSize)}）？此操作不可恢复。`,
+      canRun: stats.orphanFiles.count > 0,
+      color: 'amber',
+    },
+    {
+      key: 'old_login_logs',
+      title: '旧登录日志（30 天前）',
+      desc: '删除 30 天前的登录日志记录。不影响账号锁定功能',
+      count: stats.loginLogs.old,
+      detail: `总共 ${stats.loginLogs.all} 条`,
+      btnLabel: '清理旧日志',
+      confirmMsg: `确认删除 ${stats.loginLogs.old} 条 30 天前的登录日志？`,
+      canRun: stats.loginLogs.old > 0,
+      color: 'blue',
+    },
+    {
+      key: 'all_login_logs',
+      title: '全部登录日志',
+      desc: '⚠️ 清空所有登录日志，包括最近的。会临时解除所有账号锁定',
+      count: stats.loginLogs.all,
+      detail: '',
+      btnLabel: '清空全部',
+      confirmMsg: `⚠️ 确认清空全部 ${stats.loginLogs.all} 条登录日志？此操作会解除所有账号的锁定状态。`,
+      canRun: stats.loginLogs.all > 0,
+      color: 'red',
+    },
+    {
+      key: 'old_read_notifications',
+      title: '旧已读通知（30 天前）',
+      desc: '删除 30 天前已读的系统通知',
+      count: stats.notifications.oldRead,
+      detail: `所有已读 ${stats.notifications.allRead} 条`,
+      btnLabel: '清理旧通知',
+      confirmMsg: `确认删除 ${stats.notifications.oldRead} 条 30 天前的已读通知？`,
+      canRun: stats.notifications.oldRead > 0,
+      color: 'blue',
+    },
+    {
+      key: 'all_read_notifications',
+      title: '所有已读通知',
+      desc: '清空所有已读通知（未读通知保留）',
+      count: stats.notifications.allRead,
+      detail: '',
+      btnLabel: '清空已读',
+      confirmMsg: `确认删除全部 ${stats.notifications.allRead} 条已读通知？`,
+      canRun: stats.notifications.allRead > 0,
+      color: 'red',
+    },
+  ];
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h2 className="text-lg font-semibold">数据清理</h2>
+          <p className="text-gray-400 text-sm mt-0.5">定期清理冗余数据，保持数据库与磁盘精简</p>
+        </div>
+        <button onClick={load}
+          className="px-3 py-1.5 text-xs bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 transition">
+          刷新统计
+        </button>
+      </div>
+
+      {stats.orphanFiles.count > 0 && (
+        <div className="mb-6 bg-white rounded-2xl border border-amber-200/60 overflow-hidden">
+          <div className="px-5 py-3 bg-amber-50/50 border-b border-amber-100">
+            <h3 className="text-sm font-semibold text-amber-700">孤立文件预览（最多显示 50 个）</h3>
+          </div>
+          <div className="max-h-64 overflow-auto">
+            <table className="w-full text-sm">
+              <tbody>
+                {stats.orphanFiles.files.map((f: any) => (
+                  <tr key={f.name} className="border-t border-gray-50">
+                    <td className="px-5 py-2 font-mono text-xs text-gray-600 truncate max-w-md">{f.name}</td>
+                    <td className="px-5 py-2 text-right text-xs text-gray-400 whitespace-nowrap">{formatFileSize(f.size)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      <div className="grid md:grid-cols-2 gap-4">
+        {cards.map((c) => {
+          const colorMap: Record<string, string> = {
+            amber: 'ring-amber-200/60 bg-amber-50/30',
+            blue: 'ring-blue-200/60 bg-blue-50/20',
+            red: 'ring-red-200/60 bg-red-50/20',
+          };
+          const btnColorMap: Record<string, string> = {
+            amber: 'bg-amber-600 hover:bg-amber-700',
+            blue: 'bg-blue-600 hover:bg-blue-700',
+            red: 'bg-red-600 hover:bg-red-700',
+          };
+          return (
+            <div key={c.key} className={`bg-white rounded-2xl p-5 ring-1 ${colorMap[c.color]}`}>
+              <div className="flex items-start justify-between gap-2 mb-2">
+                <h3 className="font-semibold text-gray-900 text-sm">{c.title}</h3>
+                <span className="font-mono text-2xl font-bold text-gray-900 tabular-nums">{c.count}</span>
+              </div>
+              <p className="text-xs text-gray-500 leading-relaxed mb-3">{c.desc}</p>
+              {c.detail && <p className="text-xs text-gray-400 mb-3">{c.detail}</p>}
+              <button
+                onClick={() => exec(c.key, c.confirmMsg)}
+                disabled={!c.canRun || busy === c.key}
+                className={`w-full px-3 py-2 text-xs font-semibold text-white rounded-xl transition disabled:opacity-40 disabled:cursor-not-allowed ${btnColorMap[c.color]}`}>
+                {busy === c.key ? '清理中...' : c.btnLabel}
+              </button>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="mt-6 p-4 bg-gray-50 rounded-2xl text-xs text-gray-500 leading-relaxed">
+        💡 <b className="text-gray-700">建议：</b>每月执行一次"孤立文件"和"旧登录日志"清理。
+        "清空全部" 类操作为应急选项，请谨慎使用。所有数据库操作都是即时且不可恢复的，建议清理前备份 <code className="px-1 py-0.5 bg-white rounded text-gray-700">prisma/dev.db</code>。
+      </div>
     </div>
   );
 }

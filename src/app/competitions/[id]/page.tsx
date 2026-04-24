@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { Calendar, Clock, Upload, FileText, ArrowLeft, Paperclip, Plus, X, Timer } from 'lucide-react';
 import { formatDate, getStatusLabel, getStatusColor } from '@/lib/utils';
 import { useSiteConfig } from '@/components/SiteConfigProvider';
+import MarkdownRenderer from '@/components/MarkdownRenderer';
 
 export default function CompetitionDetailPage() {
   const { id } = useParams();
@@ -21,6 +22,7 @@ export default function CompetitionDetailPage() {
   const [file, setFile] = useState<File | null>(null);
   const [extraFiles, setExtraFiles] = useState<File[]>([]);
   const [message, setMessage] = useState('');
+  const [uploadProgress, setUploadProgress] = useState(0);
 
   useEffect(() => {
     fetch(`/api/competitions/${id}`)
@@ -45,18 +47,34 @@ export default function CompetitionDetailPage() {
       formData.append('extraFiles', ef);
     }
 
+    setUploadProgress(0);
     try {
-      const res = await fetch('/api/submissions', { method: 'POST', body: formData });
-      const data = await res.json();
-      if (!res.ok) {
-        setMessage(data.error || '提交失败');
+      // 使用 XHR 以获得上传进度
+      const xhrResult = await new Promise<{ ok: boolean; status: number; data: any }>((resolve) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', '/api/submissions');
+        xhr.upload.onprogress = (ev) => {
+          if (ev.lengthComputable) {
+            setUploadProgress(Math.round((ev.loaded / ev.total) * 100));
+          }
+        };
+        xhr.onload = () => {
+          let data: any = {};
+          try { data = JSON.parse(xhr.responseText || '{}'); } catch {}
+          resolve({ ok: xhr.status >= 200 && xhr.status < 300, status: xhr.status, data });
+        };
+        xhr.onerror = () => resolve({ ok: false, status: 0, data: { error: '网络错误' } });
+        xhr.send(formData);
+      });
+
+      if (!xhrResult.ok) {
+        setMessage(xhrResult.data?.error || '提交失败');
       } else {
         setMessage('提交成功！');
         setShowForm(false);
         setFile(null);
         setExtraFiles([]);
         setForm({ teamName: '', teamMembers: '', notes: '' });
-        // Refresh competition data
         const refreshRes = await fetch(`/api/competitions/${id}`);
         const refreshData = await refreshRes.json();
         setCompetition(refreshData);
@@ -65,6 +83,7 @@ export default function CompetitionDetailPage() {
       setMessage('提交失败');
     } finally {
       setSubmitting(false);
+      setUploadProgress(0);
     }
   };
 
@@ -105,9 +124,7 @@ export default function CompetitionDetailPage() {
 
         <Countdown endTime={competition.endTime} active={competition.status === 'active'} primaryColor={config.primaryColor} />
 
-        <div className="prose prose-sm max-w-none text-gray-600 mb-8 whitespace-pre-wrap leading-relaxed">
-          {competition.content}
-        </div>
+        <MarkdownRenderer content={competition.content} className="mb-8" />
 
         {(competition.attachmentName || competition.attachments) && (
           <div className="mb-8 flex flex-wrap gap-2">
@@ -219,10 +236,22 @@ export default function CompetitionDetailPage() {
                 </div>
               )}
             </div>
+            {submitting && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-xs text-gray-500">
+                  <span>{uploadProgress < 100 ? '上传中' : '服务端处理中...'}</span>
+                  <span className="font-mono">{uploadProgress}%</span>
+                </div>
+                <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                  <div className="h-full transition-all duration-200 ease-out"
+                    style={{ width: `${uploadProgress}%`, background: `linear-gradient(90deg, ${config.primaryColor}, ${config.primaryColor}aa)` }} />
+                </div>
+              </div>
+            )}
             <button type="submit" disabled={submitting}
               className="px-6 py-3 text-white text-sm font-semibold rounded-2xl disabled:opacity-50 apple-btn transition-all duration-300"
               style={{ background: `linear-gradient(135deg, ${config.primaryColor}, ${config.primaryColor}cc)` }}>
-              {submitting ? '提交中...' : '确认提交'}
+              {submitting ? (uploadProgress < 100 ? `上传中 ${uploadProgress}%` : '服务端处理中...') : '确认提交'}
             </button>
           </form>
         </div>

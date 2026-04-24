@@ -16,31 +16,33 @@
     "prod:start": "next start -p ${PORT:-3000}"
   },
   "dependencies": {
+    "@prisma/client": "^5.15.0",
+    "bcryptjs": "^2.4.3",
+    "clsx": "^2.1.0",
+    "isomorphic-dompurify": "^3.10.0",
+    "lucide-react": "^0.400.0",
+    "marked": "^18.0.2",
     "next": "^14.2.0",
+    "next-auth": "^4.24.0",
     "react": "^18.3.0",
     "react-dom": "^18.3.0",
-    "@prisma/client": "^5.15.0",
-    "next-auth": "^4.24.0",
-    "bcryptjs": "^2.4.3",
-    "lucide-react": "^0.400.0",
-    "clsx": "^2.1.0",
     "tailwind-merge": "^2.3.0"
   },
   "prisma": {
     "seed": "npx ts-node --project tsconfig.seed.json prisma/seed.ts"
   },
   "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
     "@types/node": "^20.14.0",
     "@types/react": "^18.3.0",
     "@types/react-dom": "^18.3.0",
-    "@types/bcryptjs": "^2.4.6",
-    "typescript": "^5.5.0",
-    "prisma": "^5.15.0",
-    "tailwindcss": "^3.4.0",
-    "postcss": "^8.4.0",
     "autoprefixer": "^10.4.0",
     "eslint": "^8.57.0",
     "eslint-config-next": "^14.2.0",
-    "ts-node": "^10.9.0"
+    "postcss": "^8.4.0",
+    "prisma": "^5.15.0",
+    "tailwindcss": "^3.4.0",
+    "ts-node": "^10.9.0",
+    "typescript": "^5.5.0"
   }
 }

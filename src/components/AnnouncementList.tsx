@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Megaphone, Pin } from 'lucide-react';
 import { formatDate } from '@/lib/utils';
+import MarkdownRenderer from './MarkdownRenderer';
 
 export default function AnnouncementList() {
   const [announcements, setAnnouncements] = useState<any[]>([]);
@@ -42,7 +43,7 @@ export default function AnnouncementList() {
                 <span className="px-2 py-0.5 rounded-lg text-[10px] font-semibold bg-amber-100/80 text-amber-600">置顶</span>
               )}
             </div>
-            <p className="text-sm text-gray-500 whitespace-pre-wrap leading-relaxed">{ann.content}</p>
+            <MarkdownRenderer content={ann.content} className="compact text-gray-600" />
             <p className="text-xs text-gray-300 mt-3">{formatDate(ann.createdAt)}</p>
           </div>
         ))}
