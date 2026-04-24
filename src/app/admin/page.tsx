@@ -37,6 +37,9 @@ export default function AdminPage() {
   const compExtraFileRef = useRef<HTMLInputElement>(null);
   const [gradingId, setGradingId] = useState<string | null>(null);
   const [gradeForm, setGradeForm] = useState({ score: '', feedback: '', award: '', showcased: false });
+  const [subSearch, setSubSearch] = useState('');
+  const [subStatusFilter, setSubStatusFilter] = useState<'all' | 'pending' | 'graded'>('all');
+  const [expandedComps, setExpandedComps] = useState<Set<string>>(new Set());
   const [message, setMessage] = useState('');
   const [editingUser, setEditingUser] = useState<any>(null);
   const [userForm, setUserForm] = useState({ name: '', email: '', role: '', school: '', studentId: '', phone: '' });
@@ -600,15 +603,116 @@ export default function AdminPage() {
         </div>
       )}
 
-      {/* ===== 提交评审 ===== */}
+      {/* ===== 提交评审 (按赛题分组) ===== */}
       {tab === 'submissions' && (
         <div>
-          <h2 className="text-lg font-semibold mb-6">提交评审</h2>
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
+            <div>
+              <h2 className="text-lg font-semibold">提交评审</h2>
+              <p className="text-gray-400 text-sm mt-0.5">按赛题分组管理所有提交，方便集中评分</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="relative">
+                <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+                <input type="text" value={subSearch} onChange={(e) => setSubSearch(e.target.value)}
+                  placeholder="搜索学生/邮箱/团队..."
+                  className="pl-9 pr-3 py-2 text-sm bg-white border border-gray-200 rounded-xl w-56 outline-none focus:border-gray-400 transition" />
+              </div>
+              <div className="flex gap-1 p-1 bg-black/[0.03] rounded-xl">
+                {[
+                  { k: 'all' as const, label: '全部' },
+                  { k: 'pending' as const, label: '待评审' },
+                  { k: 'graded' as const, label: '已评分' },
+                ].map((f) => (
+                  <button key={f.k} onClick={() => setSubStatusFilter(f.k)}
+                    className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all whitespace-nowrap ${
+                      subStatusFilter === f.k ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'
+                    }`}>{f.label}</button>
+                ))}
+              </div>
+              <button onClick={() => {
+                const allIds = new Set<string>(submissions.map((s: any) => s.competitionId));
+                setExpandedComps(expandedComps.size === allIds.size ? new Set() : allIds);
+              }}
+                className="px-3 py-1.5 text-xs bg-gray-900 text-white rounded-xl hover:bg-gray-800 transition whitespace-nowrap">
+                {expandedComps.size > 0 ? '全部折叠' : '全部展开'}
+              </button>
+            </div>
+          </div>
+
           {submissions.length === 0 ? (
-            <p className="text-gray-500 text-center py-10">暂无提交</p>
-          ) : (
-            <div className="space-y-3">
-              {submissions.map((sub) => (
+            <p className="text-gray-500 text-center py-10 bg-white rounded-2xl border border-gray-200">暂无提交</p>
+          ) : (() => {
+            // 过滤
+            const q = subSearch.trim().toLowerCase();
+            const filtered = submissions.filter((s: any) => {
+              if (subStatusFilter !== 'all' && s.status !== subStatusFilter) return false;
+              if (!q) return true;
+              return (s.user?.name || '').toLowerCase().includes(q)
+                || (s.user?.email || '').toLowerCase().includes(q)
+                || (s.teamName || '').toLowerCase().includes(q)
+                || (s.user?.school || '').toLowerCase().includes(q);
+            });
+
+            // 按赛题分组
+            const groups = new Map<string, { competition: any; subs: any[] }>();
+            for (const s of filtered) {
+              const key = s.competitionId;
+              if (!groups.has(key)) groups.set(key, { competition: s.competition, subs: [] });
+              groups.get(key)!.subs.push(s);
+            }
+            const groupList = Array.from(groups.entries());
+
+            if (groupList.length === 0) {
+              return <p className="text-gray-400 text-center py-12 bg-white rounded-2xl border border-gray-200/80">没有匹配的提交</p>;
+            }
+
+            return (
+              <div className="space-y-3">
+                {groupList.map(([compId, { competition, subs }]) => {
+                  const isExpanded = expandedComps.has(compId);
+                  const pendingCount = subs.filter((s: any) => s.status !== 'graded').length;
+                  const gradedCount = subs.length - pendingCount;
+                  const toggle = () => {
+                    const next = new Set(expandedComps);
+                    if (isExpanded) next.delete(compId); else next.add(compId);
+                    setExpandedComps(next);
+                  };
+                  return (
+                    <div key={compId} className="bg-white rounded-2xl border border-gray-200/80 overflow-hidden transition-all">
+                      {/* 赛题卡片头 */}
+                      <button onClick={toggle}
+                        className="w-full flex flex-wrap items-center gap-3 px-5 py-4 hover:bg-gray-50/50 transition-colors text-left">
+                        <HardDrive className="w-5 h-5 text-gray-400 flex-shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h3 className="font-semibold text-gray-900 truncate">{competition?.title || '未知赛题'}</h3>
+                            {competition?.status && (
+                              <span className={`px-2 py-0.5 rounded-lg text-[10px] font-semibold ${getStatusColor(competition.status)}`}>
+                                {getStatusLabel(competition.status)}
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex flex-wrap gap-3 mt-1 text-xs text-gray-400">
+                            <span>共 <b className="text-gray-700">{subs.length}</b> 份</span>
+                            {pendingCount > 0 && <span className="text-amber-600">待评审 {pendingCount}</span>}
+                            {gradedCount > 0 && <span className="text-green-600">已评分 {gradedCount}</span>}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {pendingCount > 0 && (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 text-amber-600 ring-1 ring-amber-200/50">
+                              {pendingCount} 待评
+                            </span>
+                          )}
+                          {isExpanded ? <ChevronUp className="w-5 h-5 text-gray-400" /> : <ChevronDown className="w-5 h-5 text-gray-400" />}
+                        </div>
+                      </button>
+
+                      {/* 展开的提交列表 */}
+                      {isExpanded && (
+                        <div className="px-4 pb-4 pt-1 space-y-3 border-t border-gray-100 bg-gray-50/30">
+                          {subs.map((sub: any) => (
                 <div key={sub.id} className="bg-white rounded-xl border border-gray-200 p-5">
                   <div className="flex items-center justify-between mb-2">
                     <div>
@@ -752,9 +856,15 @@ export default function AdminPage() {
                     </div>
                   )}
                 </div>
-              ))}
-            </div>
-          )}
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
         </div>
       )}
 

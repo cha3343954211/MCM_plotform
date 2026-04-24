@@ -19,6 +19,7 @@ model User {
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
   submissions   Submission[]
+  notifications Notification[]
 }
 
 model Competition {
@@ -76,6 +77,21 @@ model LoginLog {
   createdAt DateTime @default(now())
 
   @@index([email])
+  @@index([createdAt])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String   // "graded" | "submission_deleted" | "announcement" | "system"
+  title     String
+  content   String?
+  link      String?  // 点击跳转路径
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId, read])
   @@index([createdAt])
 }
 

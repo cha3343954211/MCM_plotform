@@ -5,6 +5,7 @@ import { useSession, signOut } from 'next-auth/react';
 import { useState, useEffect } from 'react';
 import { Menu, X, BookOpen, User, LogOut, Shield, Trophy } from 'lucide-react';
 import { useSiteConfig } from './SiteConfigProvider';
+import NotificationBell from './NotificationBell';
 
 export default function Navbar() {
   const { data: session } = useSession();
@@ -57,6 +58,7 @@ export default function Navbar() {
           <div className="hidden md:flex items-center gap-2">
             {session ? (
               <>
+                <NotificationBell />
                 <Link href="/profile"
                   className="text-[13px] text-gray-500 flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-black/[0.03] hover:bg-black/[0.06] transition-all duration-300">
                   <User className="w-3.5 h-3.5" />

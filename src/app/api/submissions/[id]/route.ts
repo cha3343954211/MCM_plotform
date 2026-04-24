@@ -33,10 +33,38 @@ export async function PUT(
     if (award !== undefined) data.award = award || null;
     if (showcased !== undefined) data.showcased = Boolean(showcased);
 
+    const before = await prisma.submission.findUnique({
+      where: { id: params.id },
+      include: { competition: { select: { title: true } } },
+    });
+
     const submission = await prisma.submission.update({
       where: { id: params.id },
       data,
     });
+
+    // 评分结果变化 → 给提交者创建通知
+    try {
+      const scoreChanged = data.score !== undefined && data.score !== before?.score;
+      const awardChanged = data.award !== undefined && data.award !== before?.award;
+      const feedbackAdded = data.feedback !== undefined && data.feedback && data.feedback !== before?.feedback;
+      if (before && (scoreChanged || awardChanged || feedbackAdded)) {
+        const parts: string[] = [];
+        if (scoreChanged) parts.push(`成绩 ${submission.score ?? '-'} 分`);
+        if (awardChanged && submission.award) parts.push(`奖项: ${submission.award}`);
+        await (prisma as any).notification.create({
+          data: {
+            userId: before.userId,
+            type: 'graded',
+            title: `你的提交已被评分: ${before.competition?.title || ''}`,
+            content: parts.join(' · ') || '管理员已更新你的提交评分',
+            link: '/my-submissions',
+          },
+        });
+      }
+    } catch (e) {
+      console.error('创建评分通知失败:', e);
+    }
 
     return NextResponse.json(submission);
   } catch (error) {
