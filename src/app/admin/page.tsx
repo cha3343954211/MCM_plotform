@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
-import { Shield, Plus, FileText, Users, ChevronDown, ChevronUp, Download, Save, Trash2, Edit3, HardDrive, Upload, X, Paperclip, Megaphone, Pin, Settings, FileDown } from 'lucide-react';
+import { Shield, Plus, FileText, Users, ChevronDown, ChevronUp, Download, Save, Trash2, Edit3, HardDrive, Upload, X, Paperclip, Megaphone, Pin, Settings, FileDown, Activity, CheckCircle2, XCircle } from 'lucide-react';
 import { formatDate, getStatusLabel, getStatusColor, AWARD_OPTIONS, getAwardLabel, getAwardColor } from '@/lib/utils';
 
 function formatFileSize(bytes: number) {
@@ -15,7 +15,7 @@ function formatFileSize(bytes: number) {
 export default function AdminPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
-  const [tab, setTab] = useState<'competitions' | 'submissions' | 'users' | 'files' | 'announcements' | 'settings'>('competitions');
+  const [tab, setTab] = useState<'competitions' | 'submissions' | 'users' | 'files' | 'announcements' | 'loginLogs' | 'settings'>('competitions');
   const [siteConfigForm, setSiteConfigForm] = useState({
     siteName: '', siteDesc: '', heroTitle: '', heroDesc: '', footerText: '', primaryColor: '#2563eb', logoUrl: '', bannerText: '', bannerEnabled: false, maxFileSize: 10,
   });
@@ -44,6 +44,8 @@ export default function AdminPage() {
   const [showAnnForm, setShowAnnForm] = useState(false);
   const [editingAnn, setEditingAnn] = useState<any>(null);
   const [annForm, setAnnForm] = useState({ title: '', content: '', pinned: false, published: true });
+  const [loginLogs, setLoginLogs] = useState<any[]>([]);
+  const [logFilter, setLogFilter] = useState<'all' | 'true' | 'false'>('all');
 
   useEffect(() => {
     if (status === 'authenticated') {
@@ -60,12 +62,13 @@ export default function AdminPage() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [compRes, subRes, userRes, fileRes, annRes] = await Promise.all([
+      const [compRes, subRes, userRes, fileRes, annRes, logRes] = await Promise.all([
         fetch('/api/competitions'),
         fetch('/api/submissions'),
         fetch('/api/admin/users'),
         fetch('/api/admin/files'),
         fetch('/api/announcements?all=true'),
+        fetch('/api/admin/login-logs'),
       ]);
       setCompetitions(await compRes.json());
       const subData = await subRes.json();
@@ -73,6 +76,8 @@ export default function AdminPage() {
       setUsers(await userRes.json());
       setFiles(await fileRes.json());
       setAnnouncements(await annRes.json());
+      const logData = await logRes.json();
+      setLoginLogs(Array.isArray(logData) ? logData : []);
     } catch (e) {
       console.error(e);
     }
@@ -137,6 +142,38 @@ export default function AdminPage() {
       await fetch(`/api/competitions/${id}`, { method: 'DELETE' });
       loadData();
     } catch {}
+  };
+
+  const handleDeleteSubmission = async (id: string) => {
+    if (!confirm('确定删除此提交？文件也将被删除，且无法恢复。')) return;
+    try {
+      const res = await fetch(`/api/submissions/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        setMessage('提交已删除');
+        setSubmissions((prev) => prev.filter((s) => s.id !== id));
+      } else {
+        const data = await res.json();
+        setMessage(data.error || '删除失败');
+      }
+    } catch {
+      setMessage('删除失败');
+    }
+  };
+
+  const handleClearOldLogs = async (days: number) => {
+    if (!confirm(`确定清理 ${days} 天前的登录日志？`)) return;
+    try {
+      const res = await fetch(`/api/admin/login-logs?days=${days}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (res.ok) {
+        setMessage(`已清理 ${data.deleted} 条旧日志`);
+        loadData();
+      } else {
+        setMessage(data.error || '清理失败');
+      }
+    } catch {
+      setMessage('清理失败');
+    }
   };
 
   const handleGrade = async (subId: string) => {
@@ -309,6 +346,7 @@ export default function AdminPage() {
     { key: 'users' as const, label: '用户管理', icon: Users, count: users.length },
     { key: 'announcements' as const, label: '公告管理', icon: Megaphone, count: announcements.length },
     { key: 'files' as const, label: '文件存储', icon: HardDrive, count: files.totalCount || 0 },
+    { key: 'loginLogs' as const, label: '登录日志', icon: Activity, count: loginLogs.length },
     { key: 'settings' as const, label: '站点设置', icon: Settings, count: 0 },
   ];
 
@@ -600,6 +638,13 @@ export default function AdminPage() {
                         >
                           <Save className="w-3 h-3" /> 评分
                           {gradingId === sub.id ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                        </button>
+                        <button
+                          onClick={() => handleDeleteSubmission(sub.id)}
+                          className="flex items-center gap-1 px-3 py-1.5 text-xs bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition"
+                          title="删除提交"
+                        >
+                          <Trash2 className="w-3 h-3" /> 删除
                         </button>
                       </div>
                     </div>
@@ -957,6 +1002,104 @@ export default function AdminPage() {
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* ===== 登录日志 ===== */}
+      {tab === 'loginLogs' && (
+        <div>
+          <div className="flex flex-wrap justify-between items-center gap-3 mb-6">
+            <div>
+              <h2 className="text-lg font-semibold">登录日志</h2>
+              <p className="text-gray-400 text-sm mt-0.5">最近 {loginLogs.length} 条记录，用于追踪登录安全</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="flex gap-1 p-1 bg-black/[0.03] rounded-xl">
+                {[
+                  { k: 'all' as const, label: '全部' },
+                  { k: 'true' as const, label: '成功' },
+                  { k: 'false' as const, label: '失败' },
+                ].map((f) => (
+                  <button key={f.k} onClick={() => setLogFilter(f.k)}
+                    className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${
+                      logFilter === f.k ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'
+                    }`}>{f.label}</button>
+                ))}
+              </div>
+              <button onClick={() => handleClearOldLogs(30)}
+                className="px-3 py-1.5 text-xs bg-gray-900 text-white rounded-xl hover:bg-gray-800 transition">
+                清理30天前
+              </button>
+            </div>
+          </div>
+
+          {(() => {
+            const filtered = logFilter === 'all' ? loginLogs : loginLogs.filter((l) => String(l.success) === logFilter);
+            const successCount = loginLogs.filter((l) => l.success).length;
+            const failCount = loginLogs.length - successCount;
+
+            return (
+              <>
+                <div className="grid grid-cols-3 gap-3 mb-5">
+                  <div className="bg-white rounded-2xl border border-gray-200/80 p-4">
+                    <div className="text-xs text-gray-400 mb-1">总记录</div>
+                    <div className="text-2xl font-bold text-gray-900">{loginLogs.length}</div>
+                  </div>
+                  <div className="bg-green-50/60 rounded-2xl border border-green-200/50 p-4">
+                    <div className="text-xs text-green-600 mb-1 flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5" /> 成功</div>
+                    <div className="text-2xl font-bold text-green-700">{successCount}</div>
+                  </div>
+                  <div className="bg-red-50/60 rounded-2xl border border-red-200/50 p-4">
+                    <div className="text-xs text-red-600 mb-1 flex items-center gap-1"><XCircle className="w-3.5 h-3.5" /> 失败</div>
+                    <div className="text-2xl font-bold text-red-700">{failCount}</div>
+                  </div>
+                </div>
+
+                {filtered.length === 0 ? (
+                  <p className="text-gray-400 text-center py-12 bg-white rounded-2xl border border-gray-200/80">暂无日志</p>
+                ) : (
+                  <div className="bg-white rounded-2xl border border-gray-200/80 overflow-hidden">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead className="bg-gray-50/50">
+                          <tr className="text-left text-xs text-gray-500">
+                            <th className="px-4 py-3 font-medium">时间</th>
+                            <th className="px-4 py-3 font-medium">邮箱</th>
+                            <th className="px-4 py-3 font-medium">状态</th>
+                            <th className="px-4 py-3 font-medium">IP</th>
+                            <th className="px-4 py-3 font-medium">原因</th>
+                            <th className="px-4 py-3 font-medium">User-Agent</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                          {filtered.map((log) => (
+                            <tr key={log.id} className="hover:bg-gray-50/50 transition-colors">
+                              <td className="px-4 py-3 text-gray-600 whitespace-nowrap text-xs">{formatDate(log.createdAt)}</td>
+                              <td className="px-4 py-3 text-gray-900 font-medium">{log.email}</td>
+                              <td className="px-4 py-3">
+                                {log.success ? (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-semibold bg-green-50 text-green-600 ring-1 ring-green-200/50">
+                                    <CheckCircle2 className="w-3 h-3" /> 成功
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-semibold bg-red-50 text-red-600 ring-1 ring-red-200/50">
+                                    <XCircle className="w-3 h-3" /> 失败
+                                  </span>
+                                )}
+                              </td>
+                              <td className="px-4 py-3 text-gray-500 text-xs font-mono">{log.ip || '-'}</td>
+                              <td className="px-4 py-3 text-gray-500 text-xs">{log.reason || '-'}</td>
+                              <td className="px-4 py-3 text-gray-400 text-xs max-w-xs truncate" title={log.userAgent || ''}>{log.userAgent || '-'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </>
+            );
+          })()}
         </div>
       )}
 

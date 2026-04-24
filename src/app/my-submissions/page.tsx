@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
-import { FileText, ExternalLink, ArrowRight } from 'lucide-react';
+import { FileText, ExternalLink, ArrowRight, Trash2 } from 'lucide-react';
 import { formatDate, getStatusLabel, getStatusColor, getAwardLabel, getAwardColor } from '@/lib/utils';
 import { useSiteConfig } from '@/components/SiteConfigProvider';
 
@@ -11,7 +11,26 @@ export default function MySubmissionsPage() {
   const { data: session, status } = useSession();
   const [submissions, setSubmissions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const { config } = useSiteConfig();
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('确定删除该提交？已上传的文件将一并删除，且无法恢复。')) return;
+    setDeletingId(id);
+    try {
+      const res = await fetch(`/api/submissions/${id}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (res.ok) {
+        setSubmissions((prev) => prev.filter((s) => s.id !== id));
+      } else {
+        alert(data.error || '删除失败');
+      }
+    } catch {
+      alert('删除失败');
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   useEffect(() => {
     if (status === 'authenticated') {
@@ -77,9 +96,20 @@ export default function MySubmissionsPage() {
                   </Link>
                   <p className="text-sm text-gray-400 mt-0.5">文件: {sub.fileName}</p>
                 </div>
-                <span className={`px-2.5 py-1 rounded-xl text-[11px] font-semibold ${getStatusColor(sub.status)}`}>
-                  {getStatusLabel(sub.status)}
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className={`px-2.5 py-1 rounded-xl text-[11px] font-semibold ${getStatusColor(sub.status)}`}>
+                    {getStatusLabel(sub.status)}
+                  </span>
+                  {sub.status !== 'graded' && (
+                    <button
+                      onClick={() => handleDelete(sub.id)}
+                      disabled={deletingId === sub.id}
+                      className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-all duration-200 disabled:opacity-40"
+                      title="删除提交">
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
               </div>
 
               {sub.teamName && <p className="text-sm text-gray-400">团队: {sub.teamName}</p>}

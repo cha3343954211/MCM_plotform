@@ -62,6 +62,20 @@ model SiteConfig {
   updatedAt DateTime @updatedAt
 }
 
+model LoginLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  email     String
+  success   Boolean
+  ip        String?
+  userAgent String?
+  reason    String?   // 失败原因
+  createdAt DateTime @default(now())
+
+  @@index([email])
+  @@index([createdAt])
+}
+
 model Submission {
   id            String      @id @default(cuid())
   fileName      String
