@@ -1,0 +1,82 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String       @id @default(cuid())
+  name          String
+  email         String       @unique
+  password      String
+  role          String       @default("user") // "user" | "admin"
+  school        String?
+  studentId     String?
+  phone         String?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  submissions   Submission[]
+}
+
+model Competition {
+  id             String       @id @default(cuid())
+  title          String
+  description    String
+  content        String       // 赛题详细内容 (Markdown)
+  attachmentName String?      // 附件原始文件名
+  attachmentPath String?      // 附件存储路径
+  attachments    String?      // JSON array of {name, path} for multiple attachments
+  startTime      DateTime
+  endTime        DateTime
+  status         String       @default("draft") // "draft" | "active" | "ended"
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  submissions    Submission[]
+}
+
+model Announcement {
+  id        String   @id @default(cuid())
+  title     String
+  content   String
+  pinned    Boolean  @default(false) // 是否置顶
+  published Boolean  @default(true)  // 是否发布
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model SiteConfig {
+  id        String   @id @default("default")
+  siteName  String   @default("数学建模竞赛平台")
+  siteDesc  String   @default("数学建模竞赛在线平台 - 赛题发布、论文提交、成绩查询")
+  heroTitle String   @default("数学建模竞赛平台")
+  heroDesc  String   @default("参与数学建模竞赛，提升解决实际问题的能力，展现你的数学才华")
+  footerText String  @default("数学建模竞赛平台")
+  primaryColor String @default("#2563eb")
+  logoUrl   String?
+  bannerText String?
+  bannerEnabled Boolean @default(false)
+  maxFileSize Int    @default(10)
+  updatedAt DateTime @updatedAt
+}
+
+model Submission {
+  id            String      @id @default(cuid())
+  fileName      String
+  filePath      String
+  extraFiles    String?      // JSON array of {name, path} for additional files
+  teamName      String?
+  teamMembers   String?     // JSON string of team members
+  notes         String?
+  score         Float?
+  feedback      String?
+  status        String      @default("pending") // "pending" | "graded"
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  userId        String
+  competitionId String
+  user          User        @relation(fields: [userId], references: [id])
+  competition   Competition @relation(fields: [competitionId], references: [id])
+}
