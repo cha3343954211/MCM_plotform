@@ -57,7 +57,7 @@ export const authOptions: NextAuthOptions = {
   pages: {
     signIn: '/login',
   },
-  secret: process.env.NEXTAUTH_SECRET,
+  secret: process.env.NEXTAUTH_SECRET || (() => { if (process.env.NODE_ENV === 'production') throw new Error('NEXTAUTH_SECRET is required in production'); return 'dev-secret-do-not-use-in-production'; })(),
   session: {
     strategy: 'jwt',
     maxAge: 7 * 24 * 60 * 60, // 7 days

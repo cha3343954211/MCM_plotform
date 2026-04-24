@@ -1,3 +1,11 @@
+import { mkdirSync } from 'fs';
+import { join } from 'path';
+
+// Ensure upload directories exist on startup
+try {
+  mkdirSync(join(process.cwd(), 'public', 'uploads', 'competitions'), { recursive: true });
+} catch {}
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   poweredByHeader: false,

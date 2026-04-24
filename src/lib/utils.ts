@@ -36,3 +36,38 @@ export function getStatusColor(status: string) {
   };
   return map[status] || 'bg-gray-100 text-gray-700';
 }
+
+export const AWARD_OPTIONS = [
+  { value: '', label: '无奖项' },
+  { value: 'special', label: '特等奖' },
+  { value: 'first', label: '一等奖' },
+  { value: 'second', label: '二等奖' },
+  { value: 'third', label: '三等奖' },
+  { value: 'excellent', label: '优秀奖' },
+];
+
+export function getAwardLabel(award: string | null | undefined) {
+  if (!award) return '';
+  const map: Record<string, string> = {
+    special: '特等奖', first: '一等奖', second: '二等奖',
+    third: '三等奖', excellent: '优秀奖',
+  };
+  return map[award] || award; // custom awards return their name directly
+}
+
+export function getAwardColor(award: string | null | undefined) {
+  if (!award) return '';
+  const map: Record<string, string> = {
+    special: 'bg-red-50 text-red-600 ring-red-200/50',
+    first: 'bg-amber-50 text-amber-600 ring-amber-200/50',
+    second: 'bg-slate-50 text-slate-600 ring-slate-200/50',
+    third: 'bg-orange-50 text-orange-600 ring-orange-200/50',
+    excellent: 'bg-sky-50 text-sky-600 ring-sky-200/50',
+  };
+  return map[award] || 'bg-violet-50 text-violet-600 ring-violet-200/50'; // custom awards get violet style
+}
+
+export function isPresetAward(award: string | null | undefined) {
+  if (!award) return false;
+  return ['special', 'first', 'second', 'third', 'excellent'].includes(award);
+}

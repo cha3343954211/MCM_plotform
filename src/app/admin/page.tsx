@@ -4,7 +4,7 @@ import { useEffect, useState, useRef } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { Shield, Plus, FileText, Users, ChevronDown, ChevronUp, Download, Save, Trash2, Edit3, HardDrive, Upload, X, Paperclip, Megaphone, Pin, Settings, FileDown } from 'lucide-react';
-import { formatDate, getStatusLabel, getStatusColor } from '@/lib/utils';
+import { formatDate, getStatusLabel, getStatusColor, AWARD_OPTIONS, getAwardLabel, getAwardColor } from '@/lib/utils';
 
 function formatFileSize(bytes: number) {
   if (bytes < 1024) return bytes + ' B';
@@ -36,7 +36,7 @@ export default function AdminPage() {
   const compFileRef = useRef<HTMLInputElement>(null);
   const compExtraFileRef = useRef<HTMLInputElement>(null);
   const [gradingId, setGradingId] = useState<string | null>(null);
-  const [gradeForm, setGradeForm] = useState({ score: '', feedback: '' });
+  const [gradeForm, setGradeForm] = useState({ score: '', feedback: '', award: '', showcased: false });
   const [message, setMessage] = useState('');
   const [editingUser, setEditingUser] = useState<any>(null);
   const [userForm, setUserForm] = useState({ name: '', email: '', role: '', school: '', studentId: '', phone: '' });
@@ -144,11 +144,11 @@ export default function AdminPage() {
       const res = await fetch(`/api/submissions/${subId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ score: gradeForm.score, feedback: gradeForm.feedback, status: 'graded' }),
+        body: JSON.stringify({ score: gradeForm.score, feedback: gradeForm.feedback, award: gradeForm.award, showcased: gradeForm.showcased, status: 'graded' }),
       });
       if (res.ok) {
         setGradingId(null);
-        setGradeForm({ score: '', feedback: '' });
+        setGradeForm({ score: '', feedback: '', award: '', showcased: false });
         loadData();
         setMessage('评分成功');
       }
@@ -315,31 +315,36 @@ export default function AdminPage() {
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
       <div className="flex items-center gap-3 mb-8">
-        <Shield className="w-7 h-7 text-primary-600" />
-        <h1 className="text-3xl font-bold text-gray-900">管理后台</h1>
+        <div className="w-10 h-10 rounded-2xl bg-primary-50 flex items-center justify-center">
+          <Shield className="w-5 h-5 text-primary-600" />
+        </div>
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 tracking-tight">管理后台</h1>
+          <p className="text-gray-400 text-sm">管理赛题、提交、用户和站点配置</p>
+        </div>
       </div>
 
       {message && (
-        <div className={`mb-6 p-3 rounded-lg text-sm ${message.includes('成功') || message.includes('已删除') ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>
+        <div className={`mb-6 p-4 rounded-2xl text-sm font-medium flex items-center justify-between ${message.includes('成功') || message.includes('已删除') ? 'bg-green-50/80 text-green-600 border border-green-200/50' : 'bg-red-50/80 text-red-600 border border-red-200/50'}`}>
           {message}
-          <button onClick={() => setMessage('')} className="float-right text-xs underline">关闭</button>
+          <button onClick={() => setMessage('')} className="text-xs opacity-60 hover:opacity-100 transition-opacity">关闭</button>
         </div>
       )}
 
-      <div className="flex gap-2 mb-8 border-b border-gray-200 overflow-x-auto">
+      <div className="flex gap-1 p-1 bg-black/[0.03] rounded-2xl mb-8 overflow-x-auto">
         {tabs.map((t) => (
           <button
             key={t.key}
             onClick={() => setTab(t.key)}
-            className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition whitespace-nowrap ${
+            className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-xl transition-all duration-300 whitespace-nowrap ${
               tab === t.key
-                ? 'border-primary-600 text-primary-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
+                ? 'bg-white shadow-sm text-gray-900'
+                : 'text-gray-500 hover:text-gray-700'
             }`}
           >
             <t.icon className="w-4 h-4" />
             {t.label}
-            <span className="ml-1 px-1.5 py-0.5 text-xs bg-gray-100 text-gray-600 rounded-full">{t.count}</span>
+            {t.count > 0 && <span className="ml-0.5 px-1.5 py-0.5 text-[10px] bg-gray-100 text-gray-500 rounded-lg">{t.count}</span>}
           </button>
         ))}
       </div>
@@ -589,7 +594,7 @@ export default function AdminPage() {
                         <button
                           onClick={() => {
                             setGradingId(gradingId === sub.id ? null : sub.id);
-                            setGradeForm({ score: sub.score?.toString() || '', feedback: sub.feedback || '' });
+                            setGradeForm({ score: sub.score?.toString() || '', feedback: sub.feedback || '', award: sub.award || '', showcased: sub.showcased || false });
                           }}
                           className="flex items-center gap-1 px-3 py-1.5 text-xs bg-primary-50 text-primary-600 rounded-lg hover:bg-primary-100 transition"
                         >
@@ -601,9 +606,11 @@ export default function AdminPage() {
                   </div>
 
                   {sub.score !== null && sub.score !== undefined && gradingId !== sub.id && (
-                    <div className="mt-2 p-2 bg-blue-50 rounded-lg text-sm">
+                    <div className="mt-2 p-2 bg-blue-50 rounded-lg text-sm flex flex-wrap items-center gap-2">
                       <span className="font-medium text-blue-700">成绩: {sub.score} 分</span>
-                      {sub.feedback && <span className="text-blue-600 ml-2">| 评语: {sub.feedback}</span>}
+                      {sub.feedback && <span className="text-blue-600">| 评语: {sub.feedback}</span>}
+                      {sub.award && <span className={`px-2 py-0.5 rounded-lg text-xs font-semibold ring-1 ${getAwardColor(sub.award)}`}>{getAwardLabel(sub.award)}</span>}
+                      {sub.showcased && <span className="px-2 py-0.5 rounded-lg text-xs font-semibold bg-purple-50 text-purple-600 ring-1 ring-purple-200/50">已公示</span>}
                     </div>
                   )}
 
@@ -629,6 +636,46 @@ export default function AdminPage() {
                             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
                             placeholder="输入评语"
                           />
+                        </div>
+                      </div>
+                      <div className="grid md:grid-cols-2 gap-3 mb-3">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">奖项等级</label>
+                          <div className="flex gap-2">
+                            <select
+                              value={AWARD_OPTIONS.some(o => o.value === gradeForm.award) ? gradeForm.award : '__custom__'}
+                              onChange={(e) => {
+                                if (e.target.value === '__custom__') {
+                                  setGradeForm({ ...gradeForm, award: '' });
+                                } else {
+                                  setGradeForm({ ...gradeForm, award: e.target.value });
+                                }
+                              }}
+                              className="w-1/2 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none bg-white"
+                            >
+                              {AWARD_OPTIONS.map((opt) => (
+                                <option key={opt.value} value={opt.value}>{opt.label}</option>
+                              ))}
+                              <option value="__custom__">自定义奖项...</option>
+                            </select>
+                            {(!AWARD_OPTIONS.some(o => o.value === gradeForm.award) || gradeForm.award === '') && (
+                              <input
+                                type="text"
+                                value={AWARD_OPTIONS.some(o => o.value === gradeForm.award) ? '' : gradeForm.award}
+                                onChange={(e) => setGradeForm({ ...gradeForm, award: e.target.value })}
+                                className="w-1/2 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
+                                placeholder="输入自定义奖项名称"
+                              />
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-end">
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input type="checkbox" checked={gradeForm.showcased}
+                              onChange={(e) => setGradeForm({ ...gradeForm, showcased: e.target.checked })}
+                              className="w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
+                            <span className="text-sm text-gray-700">在论文公示板展示</span>
+                          </label>
                         </div>
                       </div>
                       <button

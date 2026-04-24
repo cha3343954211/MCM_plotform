@@ -2,118 +2,110 @@
 
 import Link from 'next/link';
 import { useSession, signOut } from 'next-auth/react';
-import { useState } from 'react';
-import { Menu, X, BookOpen, User, LogOut, Shield } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Menu, X, BookOpen, User, LogOut, Shield, Trophy } from 'lucide-react';
 import { useSiteConfig } from './SiteConfigProvider';
 
 export default function Navbar() {
   const { data: session } = useSession();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
   const { config } = useSiteConfig();
 
+  useEffect(() => {
+    const fn = () => setScrolled(window.scrollY > 10);
+    window.addEventListener('scroll', fn, { passive: true });
+    return () => window.removeEventListener('scroll', fn);
+  }, []);
+
+  const navLinks = [
+    { href: '/competitions', label: '赛题列表', show: true },
+    { href: '/showcase', label: '论文公示', show: true, icon: Trophy },
+    { href: '/my-submissions', label: '我的提交', show: !!session },
+    { href: '/admin', label: '管理后台', show: session?.user?.role === 'admin', icon: Shield },
+  ].filter(n => n.show);
+
   return (
-    <nav className="bg-white/80 backdrop-blur-md border-b border-gray-200/50 sticky top-0 z-50">
+    <nav className={`sticky top-0 z-50 transition-all duration-500 ${scrolled ? 'glass shadow-sm' : 'bg-white/50 backdrop-blur-xl'}`}
+      style={{ borderBottom: '1px solid rgba(0,0,0,0.06)' }}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between h-16">
+        <div className="flex justify-between h-14">
           <div className="flex items-center">
-            <Link href="/" className="flex items-center gap-2 text-xl font-bold" style={{ color: config.primaryColor }}>
+            <Link href="/" className="flex items-center gap-2.5 font-bold tracking-tight hover:opacity-80 transition-opacity" style={{ color: config.primaryColor }}>
               {config.logoUrl ? (
-                <img src={config.logoUrl} alt="logo" className="w-7 h-7 rounded object-cover" />
+                <img src={config.logoUrl} alt="" className="w-7 h-7 rounded-lg object-cover" />
               ) : (
-                <BookOpen className="w-6 h-6" />
+                <div className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: `linear-gradient(135deg, ${config.primaryColor}, ${config.primaryColor}bb)` }}>
+                  <BookOpen className="w-4 h-4 text-white" />
+                </div>
               )}
-              {config.siteName}
+              <span className="text-[17px]">{config.siteName}</span>
             </Link>
-            <div className="hidden md:flex ml-10 space-x-1">
-              <Link href="/competitions" className="px-3 py-2 rounded-md text-sm font-medium text-gray-700 hover:text-primary-600 hover:bg-gray-50 transition">
-                赛题列表
-              </Link>
-              {session && (
-                <Link href="/my-submissions" className="px-3 py-2 rounded-md text-sm font-medium text-gray-700 hover:text-primary-600 hover:bg-gray-50 transition">
-                  我的提交
+            <div className="hidden md:flex ml-8 gap-0.5">
+              {navLinks.map((item) => (
+                <Link key={item.href} href={item.href}
+                  className="px-3.5 py-1.5 rounded-xl text-[13px] font-medium text-gray-500 hover:text-gray-900 hover:bg-black/[0.04] transition-all duration-300">
+                  <span className="flex items-center gap-1">
+                    {item.icon && <item.icon className="w-3.5 h-3.5" />}
+                    {item.label}
+                  </span>
                 </Link>
-              )}
-              {session?.user?.role === 'admin' && (
-                <Link href="/admin" className="px-3 py-2 rounded-md text-sm font-medium text-gray-700 hover:text-primary-600 hover:bg-gray-50 transition">
-                  <span className="flex items-center gap-1"><Shield className="w-4 h-4" />管理后台</span>
-                </Link>
-              )}
+              ))}
             </div>
           </div>
 
-          <div className="hidden md:flex items-center space-x-3">
+          <div className="hidden md:flex items-center gap-2">
             {session ? (
               <>
-                <span className="text-sm text-gray-600 flex items-center gap-1">
-                  <User className="w-4 h-4" />
+                <span className="text-[13px] text-gray-500 flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-black/[0.03]">
+                  <User className="w-3.5 h-3.5" />
                   {session.user.name}
                   {session.user.role === 'admin' && (
-                    <span className="ml-1 px-1.5 py-0.5 text-xs bg-primary-100 text-primary-700 rounded">管理员</span>
+                    <span className="px-1.5 py-0.5 text-[10px] font-semibold rounded-md" style={{ background: `${config.primaryColor}15`, color: config.primaryColor }}>管理员</span>
                   )}
                 </span>
-                <button
-                  onClick={() => signOut({ callbackUrl: '/' })}
-                  className="flex items-center gap-1 px-3 py-2 text-sm text-gray-600 hover:text-red-600 transition"
-                >
-                  <LogOut className="w-4 h-4" />退出
+                <button onClick={() => signOut({ callbackUrl: '/' })}
+                  className="flex items-center gap-1 px-3 py-1.5 text-[13px] text-gray-400 hover:text-red-500 rounded-xl hover:bg-red-50/50 transition-all duration-300">
+                  <LogOut className="w-3.5 h-3.5" />退出
                 </button>
               </>
             ) : (
               <>
-                <Link href="/login" className="px-4 py-2 text-sm font-medium text-gray-700 hover:text-primary-600 transition">
-                  登录
-                </Link>
-                <Link href="/register" className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 transition">
-                  注册
-                </Link>
+                <Link href="/login" className="px-4 py-1.5 text-[13px] font-medium text-gray-500 hover:text-gray-900 transition-all duration-300">登录</Link>
+                <Link href="/login" className="px-4 py-1.5 text-[13px] font-semibold text-white rounded-xl apple-btn"
+                  style={{ background: `linear-gradient(135deg, ${config.primaryColor}, ${config.primaryColor}cc)` }}>注册</Link>
               </>
             )}
           </div>
 
           <div className="md:hidden flex items-center">
-            <button onClick={() => setMenuOpen(!menuOpen)} className="text-gray-500">
-              {menuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+            <button onClick={() => setMenuOpen(!menuOpen)} className="p-1.5 rounded-xl text-gray-500 hover:bg-black/[0.04] transition-all duration-300">
+              {menuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
             </button>
           </div>
         </div>
       </div>
 
-      {menuOpen && (
-        <div className="md:hidden border-t border-gray-200 bg-white">
-          <div className="px-4 py-3 space-y-2">
-            <Link href="/competitions" className="block px-3 py-2 rounded-md text-sm text-gray-700 hover:bg-gray-50" onClick={() => setMenuOpen(false)}>
-              赛题列表
+      <div className={`md:hidden overflow-hidden transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${menuOpen ? 'max-h-80 opacity-100' : 'max-h-0 opacity-0'}`}>
+        <div className="px-4 py-3 space-y-1 glass border-t border-white/10">
+          {navLinks.map((item) => (
+            <Link key={item.href} href={item.href} className="block px-3 py-2.5 rounded-xl text-sm text-gray-600 hover:bg-black/[0.04] transition-all" onClick={() => setMenuOpen(false)}>
+              {item.label}
             </Link>
-            {session && (
-              <Link href="/my-submissions" className="block px-3 py-2 rounded-md text-sm text-gray-700 hover:bg-gray-50" onClick={() => setMenuOpen(false)}>
-                我的提交
-              </Link>
-            )}
-            {session?.user?.role === 'admin' && (
-              <Link href="/admin" className="block px-3 py-2 rounded-md text-sm text-gray-700 hover:bg-gray-50" onClick={() => setMenuOpen(false)}>
-                管理后台
-              </Link>
-            )}
-            {session ? (
-              <button
-                onClick={() => { signOut({ callbackUrl: '/' }); setMenuOpen(false); }}
-                className="block w-full text-left px-3 py-2 rounded-md text-sm text-red-600 hover:bg-gray-50"
-              >
-                退出登录
-              </button>
-            ) : (
-              <>
-                <Link href="/login" className="block px-3 py-2 rounded-md text-sm text-gray-700 hover:bg-gray-50" onClick={() => setMenuOpen(false)}>
-                  登录
-                </Link>
-                <Link href="/register" className="block px-3 py-2 rounded-md text-sm text-white bg-primary-600 text-center hover:bg-primary-700" onClick={() => setMenuOpen(false)}>
-                  注册
-                </Link>
-              </>
-            )}
-          </div>
+          ))}
+          {session ? (
+            <button onClick={() => { signOut({ callbackUrl: '/' }); setMenuOpen(false); }}
+              className="block w-full text-left px-3 py-2.5 rounded-xl text-sm text-red-500 hover:bg-red-50/50 transition-all">
+              退出登录
+            </button>
+          ) : (
+            <Link href="/login" className="block px-3 py-2.5 rounded-xl text-sm font-medium text-center text-white"
+              style={{ background: `linear-gradient(135deg, ${config.primaryColor}, ${config.primaryColor}cc)` }} onClick={() => setMenuOpen(false)}>
+              登录 / 注册
+            </Link>
+          )}
         </div>
-      )}
+      </div>
     </nav>
   );
 }

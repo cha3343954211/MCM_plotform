@@ -40,17 +40,20 @@ export function useSiteConfig() {
 export function SiteConfigProvider({ children }: { children: ReactNode }) {
   const [config, setConfig] = useState<SiteConfig>(defaultConfig);
 
-  const refresh = () => {
+  const refresh = (retries = 2) => {
     fetch('/api/site-config')
-      .then((r) => r.json())
+      .then((r) => { if (!r.ok) throw new Error('fetch failed'); return r.json(); })
       .then((data) => {
         if (data && data.siteName) setConfig(data);
       })
-      .catch(() => {});
+      .catch(() => {
+        if (retries > 0) setTimeout(() => refresh(retries - 1), 2000);
+      });
   };
 
   useEffect(() => {
     refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (

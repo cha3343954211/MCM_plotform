@@ -1,89 +1,43 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { Suspense, useState, useEffect } from 'react';
 import { signIn } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
-import Link from 'next/link';
-import { LogIn, Mail, Lock } from 'lucide-react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { LogIn, Mail, Lock, User, Building2, CreditCard, Phone, UserPlus, ArrowRight } from 'lucide-react';
 import { useSiteConfig } from '@/components/SiteConfigProvider';
 
-function FloatingParticles() {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="min-h-[calc(100vh-3.5rem)] flex items-center justify-center bg-[#f5f5f7]"><div className="w-8 h-8 border-2 border-gray-200 border-t-gray-500 rounded-full animate-spin" /></div>}>
+      <LoginContent />
+    </Suspense>
+  );
+}
 
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    let animId: number;
-    const resize = () => { canvas.width = canvas.offsetWidth; canvas.height = canvas.offsetHeight; };
-    resize();
-    window.addEventListener('resize', resize);
-
-    const particles: { x: number; y: number; vx: number; vy: number; r: number; o: number }[] = [];
-    for (let i = 0; i < 60; i++) {
-      particles.push({
-        x: Math.random() * canvas.width,
-        y: Math.random() * canvas.height,
-        vx: (Math.random() - 0.5) * 0.6,
-        vy: (Math.random() - 0.5) * 0.6,
-        r: Math.random() * 2 + 1,
-        o: Math.random() * 0.4 + 0.1,
-      });
-    }
-
-    const draw = () => {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      for (const p of particles) {
-        p.x += p.vx; p.y += p.vy;
-        if (p.x < 0) p.x = canvas.width;
-        if (p.x > canvas.width) p.x = 0;
-        if (p.y < 0) p.y = canvas.height;
-        if (p.y > canvas.height) p.y = 0;
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(255,255,255,${p.o})`;
-        ctx.fill();
-      }
-      // Draw connections
-      for (let i = 0; i < particles.length; i++) {
-        for (let j = i + 1; j < particles.length; j++) {
-          const dx = particles[i].x - particles[j].x;
-          const dy = particles[i].y - particles[j].y;
-          const dist = Math.sqrt(dx * dx + dy * dy);
-          if (dist < 120) {
-            ctx.beginPath();
-            ctx.moveTo(particles[i].x, particles[i].y);
-            ctx.lineTo(particles[j].x, particles[j].y);
-            ctx.strokeStyle = `rgba(255,255,255,${0.08 * (1 - dist / 120)})`;
-            ctx.stroke();
-          }
-        }
-      }
-      animId = requestAnimationFrame(draw);
-    };
-    draw();
-    return () => { cancelAnimationFrame(animId); window.removeEventListener('resize', resize); };
-  }, []);
-
-  return <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />;
+function FloatingOrbs({ color }: { color: string }) {
+  return (
+    <div className="absolute inset-0 overflow-hidden">
+      <div className="absolute -top-32 -left-32 w-[500px] h-[500px] rounded-full opacity-30 animate-orb" style={{ background: `radial-gradient(circle, ${color}66, transparent 70%)` }} />
+      <div className="absolute -bottom-40 -right-40 w-[600px] h-[600px] rounded-full opacity-20 animate-orb" style={{ background: `radial-gradient(circle, ${color}44, transparent 70%)`, animationDelay: '-5s' }} />
+      <div className="absolute top-1/3 right-1/4 w-[300px] h-[300px] rounded-full opacity-15 animate-orb" style={{ background: `radial-gradient(circle, ${color}55, transparent 70%)`, animationDelay: '-10s' }} />
+    </div>
+  );
 }
 
 function MathFormulas() {
-  const formulas = ['∫', 'Σ', 'π', '∞', 'Δ', '√', 'λ', 'θ', 'α', 'β', '∂', 'φ', 'ε', 'μ', 'ω'];
+  const formulas = ['∫', 'Σ', 'π', '∞', 'Δ', '√', 'λ', 'θ', 'α', 'β', '∂', 'φ'];
   return (
     <div className="absolute inset-0 overflow-hidden pointer-events-none">
       {formulas.map((f, i) => (
         <span
           key={i}
-          className="absolute text-white/[0.06] font-serif select-none animate-float"
+          className="absolute text-white/[0.04] font-serif select-none animate-float"
           style={{
-            left: `${(i * 7) % 100}%`,
-            top: `${(i * 13 + 5) % 100}%`,
-            fontSize: `${Math.random() * 40 + 20}px`,
-            animationDelay: `${i * 0.5}s`,
-            animationDuration: `${6 + Math.random() * 6}s`,
+            left: `${(i * 8.5) % 100}%`,
+            top: `${(i * 13 + 5) % 90}%`,
+            fontSize: `${28 + (i % 4) * 12}px`,
+            animationDelay: `${i * 0.7}s`,
+            animationDuration: `${8 + (i % 3) * 3}s`,
           }}
         >
           {f}
@@ -93,147 +47,249 @@ function MathFormulas() {
   );
 }
 
-export default function LoginPage() {
+function LoginContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const [mode, setMode] = useState<'login' | 'register'>(searchParams.get('registered') ? 'login' : 'login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState(searchParams.get('registered') ? '注册成功，请登录' : '');
   const [loading, setLoading] = useState(false);
   const [mounted, setMounted] = useState(false);
   const { config } = useSiteConfig();
+  const [regForm, setRegForm] = useState({
+    name: '', email: '', password: '', confirmPassword: '',
+    school: '', studentId: '', phone: '',
+  });
 
   useEffect(() => { setMounted(true); }, []);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
-    setLoading(true);
-
+    setError(''); setSuccess(''); setLoading(true);
     try {
-      const res = await signIn('credentials', {
-        email,
-        password,
-        redirect: false,
-      });
-
-      if (res?.error) {
-        setError(res.error);
-      } else {
-        router.push('/competitions');
-        router.refresh();
-      }
-    } catch {
-      setError('登录失败，请稍后重试');
-    } finally {
-      setLoading(false);
-    }
+      const res = await signIn('credentials', { email, password, redirect: false });
+      if (res?.error) { setError(res.error); }
+      else { router.push('/competitions'); router.refresh(); }
+    } catch { setError('登录失败，请稍后重试'); }
+    finally { setLoading(false); }
   };
+
+  const handleRegister = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(''); setLoading(true);
+    if (regForm.password !== regForm.confirmPassword) { setError('两次密码不一致'); setLoading(false); return; }
+    if (regForm.password.length < 6) { setError('密码至少6位'); setLoading(false); return; }
+    try {
+      const res = await fetch('/api/register', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(regForm),
+      });
+      const data = await res.json();
+      if (!res.ok) { setError(data.error || '注册失败'); }
+      else { setSuccess('注册成功！请登录'); setMode('login'); setEmail(regForm.email); }
+    } catch { setError('注册失败'); }
+    finally { setLoading(false); }
+  };
+
+  const switchMode = (m: 'login' | 'register') => {
+    setError(''); setSuccess(''); setMode(m);
+  };
+
+  const regFields = [
+    { key: 'name', label: '姓名', type: 'text', icon: User, placeholder: '请输入姓名', required: true },
+    { key: 'email', label: '邮箱', type: 'email', icon: Mail, placeholder: 'your@email.com', required: true },
+    { key: 'password', label: '密码', type: 'password', icon: Lock, placeholder: '至少6位密码', required: true },
+    { key: 'confirmPassword', label: '确认密码', type: 'password', icon: Lock, placeholder: '再次输入密码', required: true },
+    { key: 'school', label: '学校', type: 'text', icon: Building2, placeholder: '选填', required: false },
+    { key: 'studentId', label: '学号', type: 'text', icon: CreditCard, placeholder: '选填', required: false },
+    { key: 'phone', label: '手机号', type: 'tel', icon: Phone, placeholder: '选填', required: false },
+  ];
 
   return (
     <div className="min-h-[calc(100vh-4rem)] flex relative overflow-hidden">
-      {/* Left animated panel */}
+      {/* Left brand panel */}
       <div
-        className="hidden lg:flex lg:w-1/2 relative items-center justify-center"
-        style={{ background: `linear-gradient(135deg, ${config.primaryColor}, ${config.primaryColor}dd, ${config.primaryColor}88)` }}
+        className="hidden lg:flex lg:w-[45%] relative items-center justify-center"
+        style={{ background: `linear-gradient(160deg, ${config.primaryColor}ee, ${config.primaryColor}bb, ${config.primaryColor}88)` }}
       >
-        <FloatingParticles />
+        <FloatingOrbs color={config.primaryColor} />
         <MathFormulas />
-        <div className={`relative z-10 text-center text-white px-12 transition-all duration-1000 ${mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}>
-          <div className="text-7xl mb-6 font-serif">∑</div>
-          <h2 className="text-3xl font-bold mb-4">{config.siteName}</h2>
-          <p className="text-lg text-white/80 leading-relaxed max-w-md">
+        <div className={`relative z-10 text-center text-white px-12 transition-all duration-1000 ${mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'}`}>
+          <div className="w-20 h-20 rounded-3xl glass-dark flex items-center justify-center mx-auto mb-8 text-4xl font-serif shadow-2xl">
+            ∑
+          </div>
+          <h2 className="text-4xl font-bold mb-4 tracking-tight">{config.siteName}</h2>
+          <p className="text-lg text-white/70 leading-relaxed max-w-sm mx-auto">
             {config.heroDesc}
           </p>
-          <div className="mt-8 flex justify-center gap-6 text-white/60 text-sm">
-            <div className="flex flex-col items-center">
-              <span className="text-2xl font-bold text-white/90">∫</span>
-              <span>赛题发布</span>
-            </div>
-            <div className="flex flex-col items-center">
-              <span className="text-2xl font-bold text-white/90">π</span>
-              <span>论文提交</span>
-            </div>
-            <div className="flex flex-col items-center">
-              <span className="text-2xl font-bold text-white/90">Σ</span>
-              <span>成绩查询</span>
-            </div>
+          <div className="mt-12 flex justify-center gap-10 text-white/50">
+            {[
+              { sym: '∫', label: '赛题发布' },
+              { sym: 'π', label: '论文提交' },
+              { sym: 'Σ', label: '成绩查询' },
+            ].map((item, i) => (
+              <div key={i} className="flex flex-col items-center gap-2 transition-all duration-500" style={{ animationDelay: `${i * 200}ms` }}>
+                <span className="text-3xl font-serif text-white/80">{item.sym}</span>
+                <span className="text-xs tracking-wider">{item.label}</span>
+              </div>
+            ))}
           </div>
         </div>
       </div>
 
       {/* Right form panel */}
-      <div className="flex-1 flex items-center justify-center px-4 py-12 bg-gray-50">
-        <div className={`w-full max-w-md transition-all duration-700 delay-300 ${mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'}`}>
-          <div className="bg-white rounded-2xl shadow-xl shadow-gray-200/50 border border-gray-100 p-8">
-            <div className="text-center mb-8">
-              <div
-                className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg"
-                style={{ background: `linear-gradient(135deg, ${config.primaryColor}, ${config.primaryColor}cc)` }}
-              >
-                <LogIn className="w-7 h-7 text-white" />
+      <div className="flex-1 flex items-center justify-center px-6 py-12 bg-[#f5f5f7] relative">
+        <div className={`w-full max-w-md transition-all duration-700 delay-200 ${mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}>
+
+          {/* Mode toggle */}
+          <div className="flex gap-1 p-1 bg-white/60 backdrop-blur-xl rounded-2xl mb-8 shadow-sm border border-white/40">
+            <button
+              onClick={() => switchMode('login')}
+              className={`flex-1 py-2.5 text-sm font-semibold rounded-xl transition-all duration-500 ${
+                mode === 'login'
+                  ? 'bg-white shadow-md text-gray-900'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              登录
+            </button>
+            <button
+              onClick={() => switchMode('register')}
+              className={`flex-1 py-2.5 text-sm font-semibold rounded-xl transition-all duration-500 ${
+                mode === 'register'
+                  ? 'bg-white shadow-md text-gray-900'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              注册
+            </button>
+          </div>
+
+          {/* Card */}
+          <div className="glass-card rounded-3xl p-8 shadow-xl">
+            {/* ─ Login Form ─ */}
+            <div className={`transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+              mode === 'login' ? 'opacity-100 translate-x-0 h-auto' : 'opacity-0 -translate-x-8 h-0 overflow-hidden pointer-events-none'
+            }`}>
+              <div className="text-center mb-8">
+                <div
+                  className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg apple-btn"
+                  style={{ background: `linear-gradient(135deg, ${config.primaryColor}, ${config.primaryColor}cc)` }}
+                >
+                  <LogIn className="w-7 h-7 text-white" />
+                </div>
+                <h1 className="text-2xl font-bold text-gray-900 tracking-tight">欢迎回来</h1>
+                <p className="text-gray-400 mt-1 text-sm">登录你的{config.siteName}账号</p>
               </div>
-              <h1 className="text-2xl font-bold text-gray-900">登录账号</h1>
-              <p className="text-gray-500 mt-1">欢迎回到{config.siteName}</p>
+
+              {error && mode === 'login' && (
+                <div className="mb-5 p-3 bg-red-50/80 backdrop-blur border border-red-200/50 text-red-600 rounded-2xl text-sm animate-shake">
+                  {error}
+                </div>
+              )}
+              {success && (
+                <div className="mb-5 p-3 bg-green-50/80 backdrop-blur border border-green-200/50 text-green-600 rounded-2xl text-sm animate-fade-in">
+                  {success}
+                </div>
+              )}
+
+              <form onSubmit={handleLogin} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wider">邮箱</label>
+                  <div className="relative group">
+                    <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300 group-focus-within:text-primary-500 transition-colors duration-300" />
+                    <input
+                      type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+                      className="w-full pl-11 pr-4 py-3.5 rounded-2xl apple-input text-sm" placeholder="your@email.com" required
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wider">密码</label>
+                  <div className="relative group">
+                    <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300 group-focus-within:text-primary-500 transition-colors duration-300" />
+                    <input
+                      type="password" value={password} onChange={(e) => setPassword(e.target.value)}
+                      className="w-full pl-11 pr-4 py-3.5 rounded-2xl apple-input text-sm" placeholder="输入密码" required
+                    />
+                  </div>
+                </div>
+                <button
+                  type="submit" disabled={loading}
+                  className="w-full py-3.5 text-white font-semibold rounded-2xl disabled:opacity-50 apple-btn flex items-center justify-center gap-2 text-sm"
+                  style={{ background: `linear-gradient(135deg, ${config.primaryColor}, ${config.primaryColor}dd)` }}
+                >
+                  {loading ? (
+                    <><svg className="animate-spin w-4 h-4" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>登录中...</>
+                  ) : (<>登录 <ArrowRight className="w-4 h-4" /></>)}
+                </button>
+              </form>
+
+              <p className="mt-6 text-center text-sm text-gray-400">
+                还没有账号？
+                <button onClick={() => switchMode('register')} className="font-semibold ml-1 transition-colors" style={{ color: config.primaryColor }}>
+                  立即注册
+                </button>
+              </p>
             </div>
 
-            {error && (
-              <div className="mb-6 p-3 bg-red-50 border border-red-200 text-red-700 rounded-xl text-sm animate-shake">
-                {error}
-              </div>
-            )}
-
-            <form onSubmit={handleSubmit} className="space-y-5">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">邮箱</label>
-                <div className="relative group">
-                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 group-focus-within:text-primary-500 transition" />
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition bg-gray-50/50 focus:bg-white"
-                    placeholder="your@email.com"
-                    required
-                  />
+            {/* ─ Register Form ─ */}
+            <div className={`transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+              mode === 'register' ? 'opacity-100 translate-x-0 h-auto' : 'opacity-0 translate-x-8 h-0 overflow-hidden pointer-events-none'
+            }`}>
+              <div className="text-center mb-6">
+                <div
+                  className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg apple-btn"
+                  style={{ background: `linear-gradient(135deg, ${config.primaryColor}, ${config.primaryColor}cc)` }}
+                >
+                  <UserPlus className="w-7 h-7 text-white" />
                 </div>
+                <h1 className="text-2xl font-bold text-gray-900 tracking-tight">创建账号</h1>
+                <p className="text-gray-400 mt-1 text-sm">加入{config.siteName}</p>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">密码</label>
-                <div className="relative group">
-                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 group-focus-within:text-primary-500 transition" />
-                  <input
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition bg-gray-50/50 focus:bg-white"
-                    placeholder="输入密码"
-                    required
-                  />
+              {error && mode === 'register' && (
+                <div className="mb-4 p-3 bg-red-50/80 backdrop-blur border border-red-200/50 text-red-600 rounded-2xl text-sm animate-shake">
+                  {error}
                 </div>
-              </div>
+              )}
 
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full py-3 text-white font-semibold rounded-xl hover:opacity-90 disabled:opacity-50 transition shadow-lg active:scale-[0.98]"
-                style={{ background: `linear-gradient(135deg, ${config.primaryColor}, ${config.primaryColor}dd)` }}
-              >
-                {loading ? (
-                  <span className="flex items-center justify-center gap-2">
-                    <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-                    登录中...
-                  </span>
-                ) : '登录'}
-              </button>
-            </form>
+              <form onSubmit={handleRegister} className="space-y-3">
+                {regFields.map((f) => (
+                  <div key={f.key}>
+                    <label className="block text-xs font-semibold text-gray-500 mb-1 uppercase tracking-wider">
+                      {f.label} {!f.required && <span className="text-gray-300 font-normal normal-case">(选填)</span>}
+                    </label>
+                    <div className="relative group">
+                      <f.icon className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300 group-focus-within:text-primary-500 transition-colors duration-300" />
+                      <input
+                        type={f.type}
+                        value={(regForm as any)[f.key]}
+                        onChange={(e) => setRegForm({ ...regForm, [f.key]: e.target.value })}
+                        className="w-full pl-11 pr-4 py-3 rounded-2xl apple-input text-sm"
+                        placeholder={f.placeholder} required={f.required}
+                      />
+                    </div>
+                  </div>
+                ))}
+                <button
+                  type="submit" disabled={loading}
+                  className="w-full py-3.5 text-white font-semibold rounded-2xl disabled:opacity-50 apple-btn flex items-center justify-center gap-2 text-sm mt-2"
+                  style={{ background: `linear-gradient(135deg, ${config.primaryColor}, ${config.primaryColor}dd)` }}
+                >
+                  {loading ? '注册中...' : (<>注册 <ArrowRight className="w-4 h-4" /></>)}
+                </button>
+              </form>
 
-            <p className="mt-6 text-center text-sm text-gray-500">
-              还没有账号？
-              <Link href="/register" className="font-medium ml-1 hover:underline" style={{ color: config.primaryColor }}>
-                立即注册
-              </Link>
-            </p>
+              <p className="mt-5 text-center text-sm text-gray-400">
+                已有账号？
+                <button onClick={() => switchMode('login')} className="font-semibold ml-1 transition-colors" style={{ color: config.primaryColor }}>
+                  立即登录
+                </button>
+              </p>
+            </div>
           </div>
         </div>
       </div>

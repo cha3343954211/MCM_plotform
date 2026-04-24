@@ -14,15 +14,21 @@ export async function PUT(
     }
 
     const body = await request.json();
-    const { score, feedback, status } = body;
+    const { score, feedback, status, award, showcased } = body;
+
+    const data: Record<string, unknown> = {};
+    if (score !== undefined && score !== '') {
+      const parsed = parseFloat(score);
+      if (!isNaN(parsed)) data.score = parsed;
+    }
+    if (feedback !== undefined) data.feedback = feedback;
+    if (status) data.status = status;
+    if (award !== undefined) data.award = award || null;
+    if (showcased !== undefined) data.showcased = Boolean(showcased);
 
     const submission = await prisma.submission.update({
       where: { id: params.id },
-      data: {
-        ...(score !== undefined && { score: parseFloat(score) }),
-        ...(feedback !== undefined && { feedback }),
-        ...(status && { status }),
-      },
+      data,
     });
 
     return NextResponse.json(submission);
