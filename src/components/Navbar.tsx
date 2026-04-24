@@ -57,13 +57,14 @@ export default function Navbar() {
           <div className="hidden md:flex items-center gap-2">
             {session ? (
               <>
-                <span className="text-[13px] text-gray-500 flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-black/[0.03]">
+                <Link href="/profile"
+                  className="text-[13px] text-gray-500 flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-black/[0.03] hover:bg-black/[0.06] transition-all duration-300">
                   <User className="w-3.5 h-3.5" />
                   {session.user.name}
                   {session.user.role === 'admin' && (
                     <span className="px-1.5 py-0.5 text-[10px] font-semibold rounded-md" style={{ background: `${config.primaryColor}15`, color: config.primaryColor }}>管理员</span>
                   )}
-                </span>
+                </Link>
                 <button onClick={() => signOut({ callbackUrl: '/' })}
                   className="flex items-center gap-1 px-3 py-1.5 text-[13px] text-gray-400 hover:text-red-500 rounded-xl hover:bg-red-50/50 transition-all duration-300">
                   <LogOut className="w-3.5 h-3.5" />退出
@@ -94,10 +95,16 @@ export default function Navbar() {
             </Link>
           ))}
           {session ? (
-            <button onClick={() => { signOut({ callbackUrl: '/' }); setMenuOpen(false); }}
-              className="block w-full text-left px-3 py-2.5 rounded-xl text-sm text-red-500 hover:bg-red-50/50 transition-all">
-              退出登录
-            </button>
+            <>
+              <Link href="/profile" onClick={() => setMenuOpen(false)}
+                className="block px-3 py-2.5 rounded-xl text-sm text-gray-600 hover:bg-black/[0.04] transition-all">
+                个人中心
+              </Link>
+              <button onClick={() => { signOut({ callbackUrl: '/' }); setMenuOpen(false); }}
+                className="block w-full text-left px-3 py-2.5 rounded-xl text-sm text-red-500 hover:bg-red-50/50 transition-all">
+                退出登录
+              </button>
+            </>
           ) : (
             <Link href="/login" className="block px-3 py-2.5 rounded-xl text-sm font-medium text-center text-white"
               style={{ background: `linear-gradient(135deg, ${config.primaryColor}, ${config.primaryColor}cc)` }} onClick={() => setMenuOpen(false)}>

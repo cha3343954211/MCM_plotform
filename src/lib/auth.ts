@@ -31,6 +31,26 @@ export const authOptions: NextAuthOptions = {
           throw new Error('请输入邮箱和密码');
         }
 
+        // 登录失败锁定检查: 15 分钟内失败 >= 5 次则锁定 15 分钟
+        const LOCKOUT_WINDOW_MS = 15 * 60 * 1000;
+        const LOCKOUT_THRESHOLD = 5;
+        try {
+          const recentFails = await (prisma as any).loginLog.count({
+            where: {
+              email,
+              success: false,
+              createdAt: { gte: new Date(Date.now() - LOCKOUT_WINDOW_MS) },
+            },
+          });
+          if (recentFails >= LOCKOUT_THRESHOLD) {
+            await logAttempt(null, false, '账号锁定中');
+            throw new Error('登录失败次数过多，请 15 分钟后再试');
+          }
+        } catch (e: any) {
+          if (e?.message?.includes('登录失败次数过多')) throw e;
+          // db error, ignore lockout check
+        }
+
         const user = await prisma.user.findUnique({
           where: { email: credentials.email },
         });

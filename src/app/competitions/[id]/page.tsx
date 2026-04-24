@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Calendar, Clock, Upload, FileText, ArrowLeft, Paperclip, Plus, X } from 'lucide-react';
+import { Calendar, Clock, Upload, FileText, ArrowLeft, Paperclip, Plus, X, Timer } from 'lucide-react';
 import { formatDate, getStatusLabel, getStatusColor } from '@/lib/utils';
 import { useSiteConfig } from '@/components/SiteConfigProvider';
 
@@ -98,10 +98,12 @@ export default function CompetitionDetailPage() {
           </span>
         </div>
 
-        <div className="flex flex-wrap gap-4 text-sm text-gray-400 mb-8">
+        <div className="flex flex-wrap gap-4 text-sm text-gray-400 mb-4">
           <span className="flex items-center gap-1.5"><Calendar className="w-4 h-4" />开始: {formatDate(competition.startTime)}</span>
           <span className="flex items-center gap-1.5"><Clock className="w-4 h-4" />截止: {formatDate(competition.endTime)}</span>
         </div>
+
+        <Countdown endTime={competition.endTime} active={competition.status === 'active'} primaryColor={config.primaryColor} />
 
         <div className="prose prose-sm max-w-none text-gray-600 mb-8 whitespace-pre-wrap leading-relaxed">
           {competition.content}
@@ -257,6 +259,56 @@ export default function CompetitionDetailPage() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function Countdown({ endTime, active, primaryColor }: { endTime: string; active: boolean; primaryColor: string }) {
+  const [now, setNow] = useState(Date.now());
+
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  const end = new Date(endTime).getTime();
+  const diff = end - now;
+
+  if (!active) {
+    return (
+      <div className="mb-6 px-4 py-3 rounded-2xl bg-gray-50 text-gray-500 text-sm flex items-center gap-2">
+        <Timer className="w-4 h-4" /> 赛题当前未开放提交
+      </div>
+    );
+  }
+
+  if (diff <= 0) {
+    return (
+      <div className="mb-6 px-4 py-3 rounded-2xl bg-red-50 text-red-600 text-sm font-medium flex items-center gap-2 ring-1 ring-red-200/50">
+        <Timer className="w-4 h-4" /> 提交已截止
+      </div>
+    );
+  }
+
+  const days = Math.floor(diff / 86400000);
+  const hours = Math.floor((diff % 86400000) / 3600000);
+  const minutes = Math.floor((diff % 3600000) / 60000);
+  const seconds = Math.floor((diff % 60000) / 1000);
+
+  const urgent = diff < 3600000 * 24; // < 24h
+
+  return (
+    <div className={`mb-6 px-4 py-3 rounded-2xl text-sm flex items-center gap-3 ring-1 ${
+      urgent ? 'bg-amber-50 text-amber-700 ring-amber-200/60' : 'bg-white/60 ring-gray-200/60'
+    }`} style={!urgent ? { color: primaryColor } : undefined}>
+      <Timer className="w-4 h-4 flex-shrink-0" />
+      <span className="font-medium">距离截止还有</span>
+      <div className="flex items-center gap-1.5 font-mono tabular-nums">
+        {days > 0 && <><b className="text-base">{days}</b><span className="text-xs opacity-70">天</span></>}
+        <b className="text-base">{String(hours).padStart(2, '0')}</b><span className="text-xs opacity-70">时</span>
+        <b className="text-base">{String(minutes).padStart(2, '0')}</b><span className="text-xs opacity-70">分</span>
+        <b className="text-base">{String(seconds).padStart(2, '0')}</b><span className="text-xs opacity-70">秒</span>
+      </div>
     </div>
   );
 }

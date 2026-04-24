@@ -83,7 +83,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '该赛题未开放提交' }, { status: 400 });
     }
 
-    if (new Date() > competition.endTime) {
+    const now = new Date();
+    if (now < competition.startTime) {
+      return NextResponse.json({ error: '赛题尚未开始，请到开始时间后再提交' }, { status: 400 });
+    }
+
+    if (now > competition.endTime) {
       return NextResponse.json({ error: '提交已截止' }, { status: 400 });
     }
 

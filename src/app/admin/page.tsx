@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
-import { Shield, Plus, FileText, Users, ChevronDown, ChevronUp, Download, Save, Trash2, Edit3, HardDrive, Upload, X, Paperclip, Megaphone, Pin, Settings, FileDown, Activity, CheckCircle2, XCircle } from 'lucide-react';
+import { Shield, Plus, FileText, Users, ChevronDown, ChevronUp, Download, Save, Trash2, Edit3, HardDrive, Upload, X, Paperclip, Megaphone, Pin, Settings, FileDown, Activity, CheckCircle2, XCircle, Key } from 'lucide-react';
 import { formatDate, getStatusLabel, getStatusColor, AWARD_OPTIONS, getAwardLabel, getAwardColor, GRADIENT_PRESETS, buildHeroGradient } from '@/lib/utils';
 
 function formatFileSize(bytes: number) {
@@ -235,6 +235,26 @@ export default function AdminPage() {
       }
     } catch {
       setMessage('更新失败');
+    }
+  };
+
+  const handleResetPassword = async (user: any) => {
+    const customPwd = prompt(`为 "${user.name}" (${user.email}) 重置密码：\n\n留空则自动生成 10 位随机密码`);
+    if (customPwd === null) return; // 取消
+    try {
+      const res = await fetch(`/api/admin/users/${user.id}/reset-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ newPassword: customPwd || undefined }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        alert(`密码重置成功！\n\n新密码: ${data.newPassword}\n\n请务必记录并告知用户。`);
+      } else {
+        setMessage(data.error || '重置失败');
+      }
+    } catch {
+      setMessage('重置失败');
     }
   };
 
@@ -834,6 +854,9 @@ export default function AdminPage() {
                         <div className="flex gap-1">
                           <button onClick={() => startEditUser(user)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition" title="编辑">
                             <Edit3 className="w-3.5 h-3.5" />
+                          </button>
+                          <button onClick={() => handleResetPassword(user)} className="p-1.5 text-amber-600 hover:bg-amber-50 rounded-lg transition" title="重置密码">
+                            <Key className="w-3.5 h-3.5" />
                           </button>
                           <button onClick={() => handleDeleteUser(user.id)} className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition" title="删除">
                             <Trash2 className="w-3.5 h-3.5" />

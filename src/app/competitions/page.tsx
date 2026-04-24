@@ -2,13 +2,15 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Calendar, Users, Clock, ArrowRight, BookOpen } from 'lucide-react';
+import { Calendar, Users, Clock, ArrowRight, BookOpen, Search, X } from 'lucide-react';
 import { formatDate, getStatusLabel, getStatusColor } from '@/lib/utils';
 import { useSiteConfig } from '@/components/SiteConfigProvider';
 
 export default function CompetitionsPage() {
   const [competitions, setCompetitions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [query, setQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'ended' | 'draft'>('all');
   const { config } = useSiteConfig();
 
   useEffect(() => {
@@ -38,14 +40,60 @@ export default function CompetitionsPage() {
         <p className="text-gray-400 mt-2 text-sm">浏览所有竞赛题目，选择感兴趣的赛题参与</p>
       </div>
 
-      {competitions.length === 0 ? (
-        <div className="text-center py-24 glass-card rounded-3xl">
-          <BookOpen className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-          <p className="text-gray-400">暂无赛题</p>
+      {/* 搜索 + 筛选 */}
+      <div className="glass-card rounded-2xl p-4 mb-6 flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300" />
+          <input type="text" value={query} onChange={(e) => setQuery(e.target.value)}
+            placeholder="搜索赛题标题或描述..."
+            className="w-full pl-9 pr-9 py-2.5 text-sm bg-white/60 border border-gray-200/80 rounded-xl outline-none focus:border-gray-400 focus:bg-white transition-all" />
+          {query && (
+            <button onClick={() => setQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-300 hover:text-gray-500">
+              <X className="w-4 h-4" />
+            </button>
+          )}
         </div>
-      ) : (
+        <div className="flex gap-1 p-1 bg-black/[0.03] rounded-xl">
+          {[
+            { k: 'all' as const, label: '全部' },
+            { k: 'active' as const, label: '进行中' },
+            { k: 'ended' as const, label: '已结束' },
+          ].map((f) => (
+            <button key={f.k} onClick={() => setStatusFilter(f.k)}
+              className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all whitespace-nowrap ${
+                statusFilter === f.k ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'
+              }`}>{f.label}</button>
+          ))}
+        </div>
+      </div>
+
+      {(() => {
+        const filtered = competitions.filter((c) => {
+          if (statusFilter !== 'all' && c.status !== statusFilter) return false;
+          if (!query.trim()) return true;
+          const q = query.trim().toLowerCase();
+          return (c.title || '').toLowerCase().includes(q)
+            || (c.description || '').toLowerCase().includes(q);
+        });
+        if (competitions.length === 0) {
+          return (
+            <div className="text-center py-24 glass-card rounded-3xl">
+              <BookOpen className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+              <p className="text-gray-400">暂无赛题</p>
+            </div>
+          );
+        }
+        if (filtered.length === 0) {
+          return (
+            <div className="text-center py-16 glass-card rounded-3xl">
+              <Search className="w-10 h-10 text-gray-300 mx-auto mb-3" />
+              <p className="text-gray-400 text-sm">没有匹配的赛题</p>
+            </div>
+          );
+        }
+        return (
         <div className="grid gap-4 stagger-children">
-          {competitions.map((comp) => (
+          {filtered.map((comp) => (
             <Link key={comp.id} href={`/competitions/${comp.id}`}
               className="block glass-card rounded-2xl p-6 hover:shadow-xl hover:-translate-y-0.5 transition-all duration-500 group">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -72,7 +120,8 @@ export default function CompetitionsPage() {
             </Link>
           ))}
         </div>
-      )}
+        );
+      })()}
     </div>
   );
 }
