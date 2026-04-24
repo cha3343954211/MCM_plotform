@@ -55,6 +55,9 @@ model SiteConfig {
   heroDesc  String   @default("参与数学建模竞赛，提升解决实际问题的能力，展现你的数学才华")
   footerText String  @default("数学建模竞赛平台")
   primaryColor String @default("#2563eb")
+  secondaryColor String? // 渐变副色 (可选，启用 gradientEnabled 时生效)
+  gradientEnabled Boolean @default(false)
+  gradientAngle Int @default(160) // 渐变角度 0-360
   logoUrl   String?
   bannerText String?
   bannerEnabled Boolean @default(false)

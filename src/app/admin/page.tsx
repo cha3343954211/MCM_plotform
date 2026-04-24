@@ -4,7 +4,7 @@ import { useEffect, useState, useRef } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { Shield, Plus, FileText, Users, ChevronDown, ChevronUp, Download, Save, Trash2, Edit3, HardDrive, Upload, X, Paperclip, Megaphone, Pin, Settings, FileDown, Activity, CheckCircle2, XCircle } from 'lucide-react';
-import { formatDate, getStatusLabel, getStatusColor, AWARD_OPTIONS, getAwardLabel, getAwardColor } from '@/lib/utils';
+import { formatDate, getStatusLabel, getStatusColor, AWARD_OPTIONS, getAwardLabel, getAwardColor, GRADIENT_PRESETS, buildHeroGradient } from '@/lib/utils';
 
 function formatFileSize(bytes: number) {
   if (bytes < 1024) return bytes + ' B';
@@ -17,7 +17,7 @@ export default function AdminPage() {
   const router = useRouter();
   const [tab, setTab] = useState<'competitions' | 'submissions' | 'users' | 'files' | 'announcements' | 'loginLogs' | 'settings'>('competitions');
   const [siteConfigForm, setSiteConfigForm] = useState({
-    siteName: '', siteDesc: '', heroTitle: '', heroDesc: '', footerText: '', primaryColor: '#2563eb', logoUrl: '', bannerText: '', bannerEnabled: false, maxFileSize: 10,
+    siteName: '', siteDesc: '', heroTitle: '', heroDesc: '', footerText: '', primaryColor: '#2563eb', secondaryColor: '', gradientEnabled: false, gradientAngle: 160, logoUrl: '', bannerText: '', bannerEnabled: false, maxFileSize: 10,
   });
   const [configLoaded, setConfigLoaded] = useState(false);
   const [competitions, setCompetitions] = useState<any[]>([]);
@@ -1131,6 +1131,9 @@ function SiteSettingsPanel({ form, setForm, loaded, setLoaded, setMessage }: {
             heroDesc: data.heroDesc || '',
             footerText: data.footerText || '',
             primaryColor: data.primaryColor || '#2563eb',
+            secondaryColor: data.secondaryColor || '',
+            gradientEnabled: data.gradientEnabled || false,
+            gradientAngle: typeof data.gradientAngle === 'number' ? data.gradientAngle : 160,
             logoUrl: data.logoUrl || '',
             bannerText: data.bannerText || '',
             bannerEnabled: data.bannerEnabled || false,
@@ -1220,24 +1223,99 @@ function SiteSettingsPanel({ form, setForm, loaded, setLoaded, setMessage }: {
       </div>
 
       <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-5">
-        <h3 className="font-medium text-gray-900 border-b pb-3">主题色</h3>
-        <div className="flex flex-wrap gap-3">
-          {colorPresets.map(c => (
-            <button key={c.value} onClick={() => setForm({ ...form, primaryColor: c.value })}
-              className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm transition ${
-                form.primaryColor === c.value ? 'border-gray-900 bg-gray-50 font-medium' : 'border-gray-200 hover:border-gray-300'
-              }`}>
-              <span className="w-4 h-4 rounded-full" style={{ backgroundColor: c.value }}></span>
-              {c.name}
-            </button>
-          ))}
+        <h3 className="font-medium text-gray-900 border-b pb-3">主题配色</h3>
+
+        {/* 实时预览 */}
+        <div className="rounded-2xl h-28 shadow-inner relative overflow-hidden flex items-center justify-center"
+          style={{ background: buildHeroGradient(form) }}>
+          <div className="text-white font-semibold tracking-tight text-lg drop-shadow">配色预览</div>
+          <div className="absolute -top-10 -right-10 w-32 h-32 rounded-full bg-white/10 blur-2xl" />
         </div>
-        <div className="flex items-center gap-3">
-          <label className="text-sm text-gray-600">自定义:</label>
-          <input type="color" value={form.primaryColor} onChange={e => setForm({ ...form, primaryColor: e.target.value })}
-            className="w-10 h-10 rounded cursor-pointer border-0" />
-          <span className="text-sm text-gray-500 font-mono">{form.primaryColor}</span>
+
+        {/* 渐变开关 */}
+        <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
+          <div>
+            <div className="text-sm font-medium text-gray-900">启用渐变配色</div>
+            <p className="text-xs text-gray-400 mt-0.5">关闭时使用单色，开启后可设置副色生成渐变</p>
+          </div>
+          <label className="relative inline-flex items-center cursor-pointer">
+            <input type="checkbox" checked={form.gradientEnabled}
+              onChange={e => setForm({ ...form, gradientEnabled: e.target.checked })}
+              className="sr-only peer" />
+            <div className="w-11 h-6 bg-gray-200 peer-focus:ring-2 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
+          </label>
         </div>
+
+        {/* 渐变预设 */}
+        {form.gradientEnabled && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">渐变预设</label>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
+              {GRADIENT_PRESETS.map(g => {
+                const isActive = form.primaryColor === g.primary && form.secondaryColor === g.secondary;
+                return (
+                  <button key={g.name} type="button"
+                    onClick={() => setForm({ ...form, primaryColor: g.primary, secondaryColor: g.secondary, gradientEnabled: true })}
+                    className={`relative rounded-xl h-14 overflow-hidden transition-all ${isActive ? 'ring-2 ring-offset-2 ring-gray-900' : 'hover:scale-[1.02]'}`}
+                    style={{ background: `linear-gradient(${form.gradientAngle}deg, ${g.primary}, ${g.secondary})` }}>
+                    <span className="absolute inset-x-0 bottom-0 text-[10px] text-white font-medium bg-black/25 py-1 text-center">{g.name}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* 主色 + 副色 */}
+        <div className={`grid gap-4 ${form.gradientEnabled ? 'md:grid-cols-3' : 'md:grid-cols-1'}`}>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">主色</label>
+            <div className="flex items-center gap-2">
+              <input type="color" value={form.primaryColor} onChange={e => setForm({ ...form, primaryColor: e.target.value })}
+                className="w-10 h-10 rounded cursor-pointer border-0" />
+              <input type="text" value={form.primaryColor} onChange={e => setForm({ ...form, primaryColor: e.target.value })}
+                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:ring-2 focus:ring-primary-500 outline-none" />
+            </div>
+          </div>
+          {form.gradientEnabled && (
+            <>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">副色</label>
+                <div className="flex items-center gap-2">
+                  <input type="color" value={form.secondaryColor || '#06b6d4'} onChange={e => setForm({ ...form, secondaryColor: e.target.value })}
+                    className="w-10 h-10 rounded cursor-pointer border-0" />
+                  <input type="text" value={form.secondaryColor || ''} onChange={e => setForm({ ...form, secondaryColor: e.target.value })}
+                    placeholder="#06b6d4"
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:ring-2 focus:ring-primary-500 outline-none" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">渐变角度 {form.gradientAngle}°</label>
+                <input type="range" min="0" max="360" value={form.gradientAngle}
+                  onChange={e => setForm({ ...form, gradientAngle: parseInt(e.target.value, 10) })}
+                  className="w-full h-10 cursor-pointer accent-gray-900" />
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* 单色预设 */}
+        {!form.gradientEnabled && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">单色预设</label>
+            <div className="flex flex-wrap gap-2">
+              {colorPresets.map(c => (
+                <button key={c.value} type="button" onClick={() => setForm({ ...form, primaryColor: c.value })}
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-sm transition ${
+                    form.primaryColor === c.value ? 'border-gray-900 bg-gray-50 font-medium' : 'border-gray-200 hover:border-gray-300'
+                  }`}>
+                  <span className="w-4 h-4 rounded-full" style={{ backgroundColor: c.value }}></span>
+                  {c.name}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-5">

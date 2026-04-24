@@ -71,3 +71,34 @@ export function isPresetAward(award: string | null | undefined) {
   if (!award) return false;
   return ['special', 'first', 'second', 'third', 'excellent'].includes(award);
 }
+
+// 渐变色预设: 每个包含主色 + 副色 + 展示名
+export const GRADIENT_PRESETS = [
+  { name: '海洋蓝', primary: '#2563eb', secondary: '#06b6d4' },
+  { name: '落日紫', primary: '#7c3aed', secondary: '#ec4899' },
+  { name: '森林绿', primary: '#059669', secondary: '#84cc16' },
+  { name: '晨曦橙', primary: '#f97316', secondary: '#fbbf24' },
+  { name: '极光青', primary: '#0ea5e9', secondary: '#10b981' },
+  { name: '玫瑰金', primary: '#e11d48', secondary: '#f59e0b' },
+  { name: '深夜蓝', primary: '#1e3a8a', secondary: '#7c3aed' },
+  { name: '樱花粉', primary: '#db2777', secondary: '#f472b6' },
+  { name: '炫彩霓虹', primary: '#8b5cf6', secondary: '#06b6d4' },
+  { name: '暖阳金', primary: '#d97706', secondary: '#dc2626' },
+];
+
+/**
+ * 生成 hero 渐变背景 CSS 字符串
+ */
+export function buildHeroGradient(config: {
+  primaryColor: string;
+  secondaryColor?: string | null;
+  gradientEnabled?: boolean;
+  gradientAngle?: number;
+}) {
+  const angle = config.gradientAngle ?? 160;
+  if (config.gradientEnabled && config.secondaryColor) {
+    return `linear-gradient(${angle}deg, ${config.primaryColor}, ${config.secondaryColor})`;
+  }
+  // 默认: 单色渐变 (与之前一致)
+  return `linear-gradient(${angle}deg, ${config.primaryColor}f0, ${config.primaryColor}cc, ${config.primaryColor}90)`;
+}

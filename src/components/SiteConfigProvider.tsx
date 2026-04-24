@@ -9,6 +9,9 @@ export interface SiteConfig {
   heroDesc: string;
   footerText: string;
   primaryColor: string;
+  secondaryColor: string | null;
+  gradientEnabled: boolean;
+  gradientAngle: number;
   logoUrl: string | null;
   bannerText: string | null;
   bannerEnabled: boolean;
@@ -22,6 +25,9 @@ const defaultConfig: SiteConfig = {
   heroDesc: '参与数学建模竞赛，提升解决实际问题的能力，展现你的数学才华',
   footerText: '数学建模竞赛平台',
   primaryColor: '#2563eb',
+  secondaryColor: null,
+  gradientEnabled: false,
+  gradientAngle: 160,
   logoUrl: null,
   bannerText: null,
   bannerEnabled: false,

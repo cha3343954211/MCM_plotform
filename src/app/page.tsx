@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { BookOpen, Upload, Award, Users, ArrowRight } from 'lucide-react';
 import AnnouncementList from '@/components/AnnouncementList';
 import { useSiteConfig } from '@/components/SiteConfigProvider';
+import { buildHeroGradient } from '@/lib/utils';
 
 export default function HomePage() {
   const { config } = useSiteConfig();
@@ -14,7 +15,7 @@ export default function HomePage() {
   return (
     <div className="bg-[#f5f5f7]">
       {/* ── Hero ── */}
-      <section className="relative overflow-hidden" style={{ background: `linear-gradient(160deg, ${config.primaryColor}f0, ${config.primaryColor}cc, ${config.primaryColor}90)` }}>
+      <section className="relative overflow-hidden" style={{ background: buildHeroGradient(config) }}>
         <div className="absolute inset-0">
           <div className="absolute -top-40 -right-40 w-[600px] h-[600px] rounded-full opacity-20 animate-orb" style={{ background: `radial-gradient(circle, white, transparent 70%)` }} />
           <div className="absolute -bottom-60 -left-40 w-[700px] h-[700px] rounded-full opacity-10 animate-orb" style={{ background: `radial-gradient(circle, white, transparent 70%)`, animationDelay: '-7s' }} />

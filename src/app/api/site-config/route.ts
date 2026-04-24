@@ -38,22 +38,29 @@ export async function PUT(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { siteName, siteDesc, heroTitle, heroDesc, footerText, primaryColor, logoUrl, bannerText, bannerEnabled, maxFileSize } = body;
+    const { siteName, siteDesc, heroTitle, heroDesc, footerText, primaryColor, secondaryColor, gradientEnabled, gradientAngle, logoUrl, bannerText, bannerEnabled, maxFileSize } = body;
 
-    const config = await prisma.siteConfig.upsert({
+    const update: any = {};
+    if (siteName) update.siteName = siteName;
+    if (siteDesc) update.siteDesc = siteDesc;
+    if (heroTitle) update.heroTitle = heroTitle;
+    if (heroDesc) update.heroDesc = heroDesc;
+    if (footerText) update.footerText = footerText;
+    if (primaryColor) update.primaryColor = primaryColor;
+    if (secondaryColor !== undefined) update.secondaryColor = secondaryColor || null;
+    if (gradientEnabled !== undefined) update.gradientEnabled = Boolean(gradientEnabled);
+    if (gradientAngle !== undefined) {
+      const a = parseInt(gradientAngle, 10);
+      if (!isNaN(a)) update.gradientAngle = Math.max(0, Math.min(360, a));
+    }
+    if (logoUrl !== undefined) update.logoUrl = logoUrl;
+    if (bannerText !== undefined) update.bannerText = bannerText;
+    if (bannerEnabled !== undefined) update.bannerEnabled = bannerEnabled;
+    if (maxFileSize !== undefined) update.maxFileSize = maxFileSize;
+
+    const config = await (prisma.siteConfig as any).upsert({
       where: { id: 'default' },
-      update: {
-        siteName: siteName || undefined,
-        siteDesc: siteDesc || undefined,
-        heroTitle: heroTitle || undefined,
-        heroDesc: heroDesc || undefined,
-        footerText: footerText || undefined,
-        primaryColor: primaryColor || undefined,
-        logoUrl: logoUrl !== undefined ? logoUrl : undefined,
-        bannerText: bannerText !== undefined ? bannerText : undefined,
-        bannerEnabled: bannerEnabled !== undefined ? bannerEnabled : undefined,
-        maxFileSize: maxFileSize !== undefined ? maxFileSize : undefined,
-      },
+      update,
       create: {
         id: 'default',
         siteName: siteName || '数学建模竞赛平台',
@@ -62,6 +69,9 @@ export async function PUT(request: NextRequest) {
         heroDesc: heroDesc || '参与数学建模竞赛，提升解决实际问题的能力，展现你的数学才华',
         footerText: footerText || '数学建模竞赛平台',
         primaryColor: primaryColor || '#2563eb',
+        secondaryColor: secondaryColor || null,
+        gradientEnabled: Boolean(gradientEnabled),
+        gradientAngle: typeof gradientAngle === 'number' ? gradientAngle : 160,
         logoUrl: logoUrl || null,
         bannerText: bannerText || null,
         bannerEnabled: bannerEnabled || false,
