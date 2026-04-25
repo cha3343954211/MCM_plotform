@@ -37,8 +37,16 @@ export default function NotificationBell() {
 
   useEffect(() => {
     load();
-    const t = setInterval(load, 60_000); // 每 60 秒轮询一次 (2C2G 友好)
+    const t = setInterval(load, open ? 60_000 : 120_000);
     return () => clearInterval(t);
+  }, [load, open]);
+
+  useEffect(() => {
+    const onVisible = () => {
+      if (!document.hidden) load();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
   }, [load]);
 
   useEffect(() => {

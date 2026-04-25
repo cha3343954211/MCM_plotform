@@ -296,9 +296,15 @@ function Countdown({ endTime, active, primaryColor }: { endTime: string; active:
   const [now, setNow] = useState(Date.now());
 
   useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), 1000);
+    if (!active) return;
+    const end = new Date(endTime).getTime();
+    if (end <= Date.now()) return;
+    const tick = () => {
+      setNow(Date.now());
+    };
+    const t = setInterval(tick, 1000);
     return () => clearInterval(t);
-  }, []);
+  }, [active, endTime]);
 
   const end = new Date(endTime).getTime();
   const diff = end - now;

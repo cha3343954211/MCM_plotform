@@ -26,6 +26,7 @@ export default function AdminPage() {
   const [users, setUsers] = useState<any[]>([]);
   const [files, setFiles] = useState<any>({ files: [], totalSize: 0, totalCount: 0 });
   const [loading, setLoading] = useState(true);
+  const [loadedTabs, setLoadedTabs] = useState<Set<string>>(new Set());
   const [showForm, setShowForm] = useState(false);
   const [editingComp, setEditingComp] = useState<any>(null);
   const [compForm, setCompForm] = useState({
@@ -81,18 +82,21 @@ export default function AdminPage() {
   const loadFiles = useCallback(async () => {
     const res = await fetch('/api/admin/files', { cache: 'no-store' });
     setFiles(await res.json());
+    setLoadedTabs((prev) => new Set(prev).add('files'));
   }, []);
 
   const loadAnnouncements = useCallback(async () => {
     const res = await fetch('/api/announcements?all=true', { cache: 'no-store' });
     const data = await res.json();
     setAnnouncements(Array.isArray(data) ? data : []);
+    setLoadedTabs((prev) => new Set(prev).add('announcements'));
   }, []);
 
   const loadLoginLogs = useCallback(async () => {
     const res = await fetch('/api/admin/login-logs', { cache: 'no-store' });
     const data = await res.json();
     setLoginLogs(Array.isArray(data) ? data : []);
+    setLoadedTabs((prev) => new Set(prev).add('loginLogs'));
   }, []);
 
   const loadData = useCallback(async (showSpinner = true) => {
@@ -102,15 +106,19 @@ export default function AdminPage() {
         loadCompetitions(),
         loadSubmissions(),
         loadUsers(),
-        loadFiles(),
-        loadAnnouncements(),
-        loadLoginLogs(),
       ]);
     } catch (e) {
       console.error(e);
     }
     if (showSpinner) setLoading(false);
-  }, [loadAnnouncements, loadCompetitions, loadFiles, loadLoginLogs, loadSubmissions, loadUsers]);
+  }, [loadCompetitions, loadSubmissions, loadUsers]);
+
+  useEffect(() => {
+    if (status !== 'authenticated' || session?.user?.role !== 'admin') return;
+    if (tab === 'files' && !loadedTabs.has('files')) loadFiles();
+    if (tab === 'announcements' && !loadedTabs.has('announcements')) loadAnnouncements();
+    if (tab === 'loginLogs' && !loadedTabs.has('loginLogs')) loadLoginLogs();
+  }, [loadedTabs, loadAnnouncements, loadFiles, loadLoginLogs, session?.user?.role, status, tab]);
 
   useEffect(() => {
     if (status === 'authenticated') {
@@ -122,7 +130,7 @@ export default function AdminPage() {
     } else if (status === 'unauthenticated') {
       router.push('/login');
     }
-  }, [status, session, router, loadData]);
+  }, [status, session?.user?.role, router, loadData]);
 
   const handleCompSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
