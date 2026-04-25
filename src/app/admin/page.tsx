@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
-import { Shield, Plus, FileText, Users, ChevronDown, ChevronUp, Download, Save, Trash2, Edit3, HardDrive, Upload, X, Paperclip, Megaphone, Pin, Settings, FileDown, Activity, CheckCircle2, XCircle, Key, Sparkles } from 'lucide-react';
+import { Shield, Plus, FileText, Users, ChevronDown, ChevronUp, Download, Save, Trash2, Edit3, HardDrive, Upload, X, Paperclip, Megaphone, Pin, Settings, FileDown, Activity, CheckCircle2, XCircle, Key, Sparkles, Send, Bell, Search } from 'lucide-react';
 import MarkdownEditor from '@/components/MarkdownEditor';
 import { formatDate, getStatusLabel, getStatusColor, AWARD_OPTIONS, getAwardLabel, getAwardColor, GRADIENT_PRESETS, buildHeroGradient } from '@/lib/utils';
 
@@ -16,7 +16,7 @@ function formatFileSize(bytes: number) {
 export default function AdminPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
-  const [tab, setTab] = useState<'competitions' | 'submissions' | 'users' | 'files' | 'announcements' | 'loginLogs' | 'cleanup' | 'settings'>('competitions');
+  const [tab, setTab] = useState<'competitions' | 'submissions' | 'users' | 'files' | 'announcements' | 'loginLogs' | 'cleanup' | 'settings' | 'notifications'>('competitions');
   const [siteConfigForm, setSiteConfigForm] = useState({
     siteName: '', siteDesc: '', heroTitle: '', heroDesc: '', footerText: '', primaryColor: '#2563eb', secondaryColor: '', gradientEnabled: false, gradientAngle: 160, logoUrl: '', bannerText: '', bannerEnabled: false, maxFileSize: 10,
   });
@@ -50,6 +50,15 @@ export default function AdminPage() {
   const [annForm, setAnnForm] = useState({ title: '', content: '', pinned: false, published: true });
   const [loginLogs, setLoginLogs] = useState<any[]>([]);
   const [logFilter, setLogFilter] = useState<'all' | 'true' | 'false'>('all');
+
+  // 通知发送
+  const [notifyMode, setNotifyMode] = useState<'all' | 'users'>('all');
+  const [notifyTitle, setNotifyTitle] = useState('');
+  const [notifyContent, setNotifyContent] = useState('');
+  const [notifyLink, setNotifyLink] = useState('');
+  const [notifyUserSearch, setNotifyUserSearch] = useState('');
+  const [notifySelectedUsers, setNotifySelectedUsers] = useState<Set<string>>(new Set());
+  const [notifySending, setNotifySending] = useState(false);
 
   const loadCompetitions = useCallback(async () => {
     const res = await fetch('/api/competitions', { cache: 'no-store' });
@@ -419,6 +428,7 @@ export default function AdminPage() {
     { key: 'files' as const, label: '文件存储', icon: HardDrive, count: files.totalCount || 0 },
     { key: 'loginLogs' as const, label: '登录日志', icon: Activity, count: loginLogs.length },
     { key: 'cleanup' as const, label: '数据清理', icon: Sparkles, count: 0 },
+    { key: 'notifications' as const, label: '通知发送', icon: Bell, count: 0 },
     { key: 'settings' as const, label: '站点设置', icon: Settings, count: 0 },
   ];
 
@@ -1267,8 +1277,180 @@ export default function AdminPage() {
         </div>
       )}
 
-      {/* ===== 数据清理 ===== */}
-      {tab === 'cleanup' && <CleanupPanel onMessage={setMessage} />}
+      {/* ===== 通知发送 ===== */}
+      {tab === 'notifications' && (
+        <div className="space-y-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-semibold flex items-center gap-2"><Bell className="w-5 h-5" /> 发送通知</h2>
+              <p className="text-gray-400 text-sm mt-0.5">向全体用户或指定用户推送系统通知</p>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl border border-gray-200 p-5 sm:p-6 space-y-5">
+            {/* 发送模式 */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">发送对象</label>
+              <div className="flex gap-1 p-1 bg-black/[0.03] rounded-xl w-fit">
+                <button onClick={() => setNotifyMode('all')}
+                  className={`px-4 py-2 text-sm font-medium rounded-lg transition-all whitespace-nowrap ${notifyMode === 'all' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}>
+                  全体用户
+                </button>
+                <button onClick={() => setNotifyMode('users')}
+                  className={`px-4 py-2 text-sm font-medium rounded-lg transition-all whitespace-nowrap ${notifyMode === 'users' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}>
+                  指定用户
+                </button>
+              </div>
+            </div>
+
+            {/* 指定用户选择 */}
+            {notifyMode === 'users' && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  选择用户 <span className="text-gray-400 font-normal">({notifySelectedUsers.size} 人已选)</span>
+                </label>
+                <div className="relative mb-2">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300" />
+                  <input type="text" value={notifyUserSearch} onChange={(e) => setNotifyUserSearch(e.target.value)}
+                    placeholder="搜索姓名、邮箱、学号..."
+                    className="w-full sm:w-72 pl-9 pr-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-gray-400 transition" />
+                </div>
+                <div className="max-h-64 overflow-y-auto touch-scroll border border-gray-100 rounded-xl">
+                  <div className="divide-y divide-gray-50">
+                    {(() => {
+                      const term = notifyUserSearch.trim().toLowerCase();
+                      const filtered = term
+                        ? users.filter((u: any) =>
+                            (u.name && u.name.toLowerCase().includes(term)) ||
+                            (u.email && u.email.toLowerCase().includes(term)) ||
+                            (u.studentId && u.studentId.toLowerCase().includes(term)) ||
+                            (u.school && u.school.toLowerCase().includes(term))
+                          )
+                        : users.slice(0, 50);
+                      if (filtered.length === 0) {
+                        return <div className="px-4 py-6 text-center text-sm text-gray-400">无匹配用户</div>;
+                      }
+                      return filtered.map((u: any) => (
+                        <label key={u.id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 cursor-pointer transition">
+                          <input
+                            type="checkbox"
+                            checked={notifySelectedUsers.has(u.id)}
+                            onChange={(e) => {
+                              const next = new Set(notifySelectedUsers);
+                              if (e.target.checked) next.add(u.id);
+                              else next.delete(u.id);
+                              setNotifySelectedUsers(next);
+                            }}
+                            className="w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                          />
+                          <div className="min-w-0">
+                            <div className="text-sm font-medium text-gray-900 truncate">{u.name}</div>
+                            <div className="text-xs text-gray-400 truncate">{u.email}{u.school ? ` · ${u.school}` : ''}{u.studentId ? ` · ${u.studentId}` : ''}</div>
+                          </div>
+                        </label>
+                      ));
+                    })()}
+                  </div>
+                </div>
+                {notifySelectedUsers.size > 0 && (
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {Array.from(notifySelectedUsers).map((id) => {
+                      const u = users.find((x: any) => x.id === id);
+                      if (!u) return null;
+                      return (
+                        <span key={id} className="inline-flex items-center gap-1 px-2 py-1 bg-primary-50 text-primary-700 text-xs rounded-lg">
+                          {u.name}
+                          <button onClick={() => { const next = new Set(notifySelectedUsers); next.delete(id); setNotifySelectedUsers(next); }} className="hover:text-primary-900">
+                            <X className="w-3 h-3" />
+                          </button>
+                        </span>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* 标题 */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">通知标题 <span className="text-red-500">*</span></label>
+              <input type="text" value={notifyTitle} onChange={(e) => setNotifyTitle(e.target.value)}
+                placeholder="请输入通知标题"
+                maxLength={200}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none text-sm" />
+              <div className="text-right text-xs text-gray-400 mt-1">{notifyTitle.length}/200</div>
+            </div>
+
+            {/* 内容 */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">通知内容</label>
+              <textarea value={notifyContent} onChange={(e) => setNotifyContent(e.target.value)}
+                placeholder="可选，补充通知详细内容..."
+                rows={4}
+                maxLength={2000}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none text-sm resize-none" />
+              <div className="text-right text-xs text-gray-400 mt-1">{notifyContent.length}/2000</div>
+            </div>
+
+            {/* 链接 */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">跳转链接</label>
+              <input type="text" value={notifyLink} onChange={(e) => setNotifyLink(e.target.value)}
+                placeholder="例如 /competitions 或 https://example.com"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none text-sm" />
+            </div>
+
+            {/* 发送按钮 */}
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-2 border-t border-gray-100">
+              <p className="text-xs text-gray-400">
+                {notifyMode === 'all' ? '将向所有注册用户发送通知' : `将向 ${notifySelectedUsers.size} 名选定用户发送通知`}
+              </p>
+              <button
+                onClick={async () => {
+                  if (!notifyTitle.trim()) { setMessage('请输入通知标题'); return; }
+                  if (notifyMode === 'users' && notifySelectedUsers.size === 0) { setMessage('请至少选择一名用户'); return; }
+                  setNotifySending(true);
+                  try {
+                    const res = await fetch('/api/admin/notifications', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        mode: notifyMode,
+                        title: notifyTitle.trim(),
+                        content: notifyContent.trim() || undefined,
+                        link: notifyLink.trim() || undefined,
+                        type: 'system',
+                        userIds: notifyMode === 'users' ? Array.from(notifySelectedUsers) : undefined,
+                      }),
+                    });
+                    const data = await res.json();
+                    if (!res.ok) {
+                      setMessage(data.error || '发送失败');
+                    } else {
+                      setMessage(`成功发送 ${data.count} 条通知`);
+                      setNotifyTitle('');
+                      setNotifyContent('');
+                      setNotifyLink('');
+                      setNotifySelectedUsers(new Set());
+                    }
+                  } catch {
+                    setMessage('发送失败');
+                  }
+                  setNotifySending(false);
+                }}
+                disabled={notifySending}
+                className="flex items-center gap-2 px-5 py-2.5 bg-primary-600 text-white font-medium rounded-lg hover:bg-primary-700 transition text-sm disabled:opacity-50"
+              >
+                {notifySending ? (
+                  <><svg className="animate-spin w-4 h-4" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>发送中...</>
+                ) : (
+                  <><Send className="w-4 h-4" /> 发送通知</>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ===== 站点设置 ===== */}
       {tab === 'settings' && (
