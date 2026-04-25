@@ -29,9 +29,9 @@ export default function CompetitionsPage() {
   }
 
   return (
-    <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-      <div className="mb-10 animate-fade-in-up">
-        <h1 className="text-3xl font-bold text-gray-900 tracking-tight flex items-center gap-3">
+    <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-12">
+      <div className="mb-8 sm:mb-10 animate-fade-in-up">
+        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 tracking-tight flex items-center gap-3">
           <div className="w-10 h-10 rounded-2xl flex items-center justify-center" style={{ background: `linear-gradient(135deg, ${config.primaryColor}18, ${config.primaryColor}08)` }}>
             <BookOpen className="w-5 h-5" style={{ color: config.primaryColor }} />
           </div>
@@ -53,7 +53,7 @@ export default function CompetitionsPage() {
             </button>
           )}
         </div>
-        <div className="flex gap-1 p-1 bg-black/[0.03] rounded-xl">
+        <div className="flex flex-wrap gap-1 p-1 bg-black/[0.03] rounded-xl">
           {[
             { k: 'all' as const, label: '全部' },
             { k: 'active' as const, label: '进行中' },
@@ -95,11 +95,11 @@ export default function CompetitionsPage() {
         <div className="grid gap-4 stagger-children">
           {filtered.map((comp) => (
             <Link key={comp.id} href={`/competitions/${comp.id}`}
-              className="block glass-card rounded-2xl p-6 hover:shadow-xl hover:-translate-y-0.5 transition-all duration-500 group">
+              className="block glass-card rounded-2xl p-5 sm:p-6 hover:shadow-xl hover:-translate-y-0.5 transition-all duration-500 group">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div className="flex-1">
-                  <div className="flex items-center gap-3 mb-2">
-                    <h2 className="text-lg font-semibold text-gray-900 group-hover:text-primary-600 transition-colors duration-300 tracking-tight">
+                  <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-2">
+                    <h2 className="text-base sm:text-lg font-semibold text-gray-900 group-hover:text-primary-600 transition-colors duration-300 tracking-tight">
                       {comp.title}
                     </h2>
                     <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${getStatusColor(comp.status)}`}>
@@ -107,13 +107,13 @@ export default function CompetitionsPage() {
                     </span>
                   </div>
                   <p className="text-gray-400 text-sm line-clamp-2 mb-3">{comp.description}</p>
-                  <div className="flex flex-wrap gap-4 text-xs text-gray-300">
+                  <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2 sm:gap-4 text-xs text-gray-300">
                     <span className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5" />{formatDate(comp.startTime)}</span>
                     <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5" />截止: {formatDate(comp.endTime)}</span>
                     <span className="flex items-center gap-1"><Users className="w-3.5 h-3.5" />{comp._count?.submissions || 0} 份提交</span>
                   </div>
                 </div>
-                <div className="flex items-center gap-1 text-sm font-medium transition-all duration-300 group-hover:translate-x-1" style={{ color: config.primaryColor }}>
+                <div className="flex items-center gap-1 text-sm font-medium transition-all duration-300 group-hover:translate-x-1 self-start sm:self-auto" style={{ color: config.primaryColor }}>
                   详情 <ArrowRight className="w-4 h-4" />
                 </div>
               </div>

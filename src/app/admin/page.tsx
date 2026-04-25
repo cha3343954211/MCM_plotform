@@ -441,7 +441,7 @@ export default function AdminPage() {
         </div>
       )}
 
-      <div className="flex gap-1 p-1 bg-black/[0.03] rounded-2xl mb-8 overflow-x-auto">
+      <div className="flex gap-1 p-1 bg-black/[0.03] rounded-2xl mb-8 overflow-x-auto touch-scroll">
         {tabs.map((t) => (
           <button
             key={t.key}
@@ -462,7 +462,7 @@ export default function AdminPage() {
       {/* ===== 赛题管理 ===== */}
       {tab === 'competitions' && (
         <div>
-          <div className="flex justify-between items-center mb-6">
+          <div className="flex flex-wrap justify-between items-center gap-3 mb-6">
             <h2 className="text-lg font-semibold">赛题列表</h2>
             <button
               onClick={() => {
@@ -625,11 +625,11 @@ export default function AdminPage() {
 
           <div className="space-y-3">
             {competitions.map((comp) => (
-              <div key={comp.id} className="bg-white rounded-xl border border-gray-200 p-5">
-                <div className="flex items-center justify-between">
-                  <div>
+              <div key={comp.id} className="bg-white rounded-xl border border-gray-200 p-4 sm:p-5">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                  <div className="min-w-0">
                     <div className="flex items-center gap-2">
-                      <h3 className="font-semibold text-gray-900">{comp.title}</h3>
+                      <h3 className="font-semibold text-gray-900 truncate">{comp.title}</h3>
                       <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getStatusColor(comp.status)}`}>
                         {getStatusLabel(comp.status)}
                       </span>
@@ -644,7 +644,7 @@ export default function AdminPage() {
                       </a>
                     )}
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap gap-2">
                     <button onClick={() => startEdit(comp)} className="px-3 py-1.5 text-xs bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition">编辑</button>
                     <button onClick={() => handleDeleteComp(comp.id)} className="px-3 py-1.5 text-xs bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition">删除</button>
                   </div>
@@ -663,14 +663,14 @@ export default function AdminPage() {
               <h2 className="text-lg font-semibold">提交评审</h2>
               <p className="text-gray-400 text-sm mt-0.5">按赛题分组管理所有提交，方便集中评分</p>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <div className="relative">
                 <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
                 <input type="text" value={subSearch} onChange={(e) => setSubSearch(e.target.value)}
                   placeholder="搜索学生/邮箱/团队..."
-                  className="pl-9 pr-3 py-2 text-sm bg-white border border-gray-200 rounded-xl w-56 outline-none focus:border-gray-400 transition" />
+                  className="pl-9 pr-3 py-2 text-sm bg-white border border-gray-200 rounded-xl w-full sm:w-56 outline-none focus:border-gray-400 transition" />
               </div>
-              <div className="flex gap-1 p-1 bg-black/[0.03] rounded-xl">
+              <div className="flex flex-wrap gap-1 p-1 bg-black/[0.03] rounded-xl">
                 {[
                   { k: 'all' as const, label: '全部' },
                   { k: 'pending' as const, label: '待评审' },
@@ -728,7 +728,7 @@ export default function AdminPage() {
                             {gradedCount > 0 && <span className="text-green-600">已评分 {gradedCount}</span>}
                           </div>
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 self-start sm:self-auto">
                           {pendingCount > 0 && (
                             <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 text-amber-600 ring-1 ring-amber-200/50">
                               {pendingCount} 待评
@@ -742,9 +742,9 @@ export default function AdminPage() {
                       {isExpanded && (
                         <div className="px-4 pb-4 pt-1 space-y-3 border-t border-gray-100 bg-gray-50/30">
                           {subs.map((sub: any) => (
-                <div key={sub.id} className="bg-white rounded-xl border border-gray-200 p-5">
-                  <div className="flex items-center justify-between mb-2">
-                    <div>
+                <div key={sub.id} className="bg-white rounded-xl border border-gray-200 p-4 sm:p-5">
+                  <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3 mb-2">
+                    <div className="min-w-0">
                       <h3 className="font-semibold text-gray-900">{sub.competition?.title}</h3>
                       <p className="text-sm text-gray-500">
                         提交者: {sub.user?.name} ({sub.user?.email}) {sub.user?.school && `| ${sub.user.school}`}
@@ -771,11 +771,11 @@ export default function AdminPage() {
                       })()}
                       <p className="text-xs text-gray-400 mt-1">提交时间: {formatDate(sub.createdAt)}</p>
                     </div>
-                    <div className="flex flex-col items-end gap-2">
+                    <div className="flex flex-col items-start lg:items-end gap-2">
                       <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(sub.status)}`}>
                         {getStatusLabel(sub.status)}
                       </span>
-                      <div className="flex gap-2">
+                      <div className="flex flex-wrap gap-2">
                         <a
                           href={`/api/download?path=${encodeURIComponent(sub.filePath)}&name=${encodeURIComponent(sub.fileName)}`}
                           className="flex items-center gap-1 px-3 py-1.5 text-xs bg-gray-50 text-gray-600 rounded-lg hover:bg-gray-100 transition"

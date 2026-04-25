@@ -12,17 +12,17 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
-  maximumScale: 1,
+  viewportFit: 'cover',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="zh-CN" suppressHydrationWarning>
-      <body className="bg-[#f5f5f7] min-h-screen antialiased">
+      <body className="bg-[#f5f5f7] min-h-screen antialiased safe-area-x safe-area-bottom overflow-x-hidden">
         <Providers>
           <SiteConfigProvider>
             <Navbar />
-            <main className="min-h-[calc(100vh-3.5rem)]">{children}</main>
+            <main className="min-h-[calc(100vh-3.5rem)] overflow-x-hidden">{children}</main>
           </SiteConfigProvider>
         </Providers>
       </body>

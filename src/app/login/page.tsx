@@ -140,11 +140,11 @@ function LoginContent() {
       </div>
 
       {/* Right form panel */}
-      <div className="flex-1 flex items-center justify-center px-6 py-12 bg-[#f5f5f7] relative">
+      <div className="flex-1 flex items-start sm:items-center justify-center px-4 sm:px-6 py-6 sm:py-12 bg-[#f5f5f7] relative overflow-y-auto touch-scroll">
         <div className={`w-full max-w-md transition-all duration-700 delay-200 ${mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}>
 
           {/* Mode toggle */}
-          <div className="flex gap-1 p-1 bg-white/60 backdrop-blur-xl rounded-2xl mb-8 shadow-sm border border-white/40">
+          <div className="flex gap-1 p-1 bg-white/60 backdrop-blur-xl rounded-2xl mb-6 sm:mb-8 shadow-sm border border-white/40 sticky top-0 z-10">
             <button
               onClick={() => switchMode('login')}
               className={`flex-1 py-2.5 text-sm font-semibold rounded-xl transition-all duration-500 ${
@@ -168,19 +168,19 @@ function LoginContent() {
           </div>
 
           {/* Card */}
-          <div className="glass-card rounded-3xl p-8 shadow-xl">
+          <div className="glass-card rounded-3xl p-5 sm:p-8 shadow-xl">
             {/* ─ Login Form ─ */}
             <div className={`transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${
               mode === 'login' ? 'opacity-100 translate-x-0 h-auto' : 'opacity-0 -translate-x-8 h-0 overflow-hidden pointer-events-none'
             }`}>
-              <div className="text-center mb-8">
+              <div className="text-center mb-6 sm:mb-8">
                 <div
                   className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg apple-btn"
                   style={{ background: `linear-gradient(135deg, ${config.primaryColor}, ${config.primaryColor}cc)` }}
                 >
                   <LogIn className="w-7 h-7 text-white" />
                 </div>
-                <h1 className="text-2xl font-bold text-gray-900 tracking-tight">欢迎回来</h1>
+                <h1 className="text-xl sm:text-2xl font-bold text-gray-900 tracking-tight">欢迎回来</h1>
                 <p className="text-gray-400 mt-1 text-sm">登录你的{config.siteName}账号</p>
               </div>
 
@@ -227,7 +227,7 @@ function LoginContent() {
                 </button>
               </form>
 
-              <p className="mt-6 text-center text-sm text-gray-400">
+              <p className="mt-5 sm:mt-6 text-center text-sm text-gray-400">
                 还没有账号？
                 <button onClick={() => switchMode('register')} className="font-semibold ml-1 transition-colors" style={{ color: config.primaryColor }}>
                   立即注册
@@ -239,14 +239,14 @@ function LoginContent() {
             <div className={`transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${
               mode === 'register' ? 'opacity-100 translate-x-0 h-auto' : 'opacity-0 translate-x-8 h-0 overflow-hidden pointer-events-none'
             }`}>
-              <div className="text-center mb-6">
+              <div className="text-center mb-5 sm:mb-6">
                 <div
                   className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg apple-btn"
                   style={{ background: `linear-gradient(135deg, ${config.primaryColor}, ${config.primaryColor}cc)` }}
                 >
                   <UserPlus className="w-7 h-7 text-white" />
                 </div>
-                <h1 className="text-2xl font-bold text-gray-900 tracking-tight">创建账号</h1>
+                <h1 className="text-xl sm:text-2xl font-bold text-gray-900 tracking-tight">创建账号</h1>
                 <p className="text-gray-400 mt-1 text-sm">加入{config.siteName}</p>
               </div>
 
