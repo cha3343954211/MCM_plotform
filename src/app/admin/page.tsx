@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { Shield, Plus, FileText, Users, ChevronDown, ChevronUp, Download, Save, Trash2, Edit3, HardDrive, Upload, X, Paperclip, Megaphone, Pin, Settings, FileDown, Activity, CheckCircle2, XCircle, Key, Sparkles } from 'lucide-react';
@@ -51,6 +51,58 @@ export default function AdminPage() {
   const [loginLogs, setLoginLogs] = useState<any[]>([]);
   const [logFilter, setLogFilter] = useState<'all' | 'true' | 'false'>('all');
 
+  const loadCompetitions = useCallback(async () => {
+    const res = await fetch('/api/competitions', { cache: 'no-store' });
+    const data = await res.json();
+    setCompetitions(Array.isArray(data) ? data : []);
+  }, []);
+
+  const loadSubmissions = useCallback(async () => {
+    const res = await fetch('/api/submissions', { cache: 'no-store' });
+    const data = await res.json();
+    setSubmissions(Array.isArray(data) ? data : []);
+  }, []);
+
+  const loadUsers = useCallback(async () => {
+    const res = await fetch('/api/admin/users', { cache: 'no-store' });
+    const data = await res.json();
+    setUsers(Array.isArray(data) ? data : []);
+  }, []);
+
+  const loadFiles = useCallback(async () => {
+    const res = await fetch('/api/admin/files', { cache: 'no-store' });
+    setFiles(await res.json());
+  }, []);
+
+  const loadAnnouncements = useCallback(async () => {
+    const res = await fetch('/api/announcements?all=true', { cache: 'no-store' });
+    const data = await res.json();
+    setAnnouncements(Array.isArray(data) ? data : []);
+  }, []);
+
+  const loadLoginLogs = useCallback(async () => {
+    const res = await fetch('/api/admin/login-logs', { cache: 'no-store' });
+    const data = await res.json();
+    setLoginLogs(Array.isArray(data) ? data : []);
+  }, []);
+
+  const loadData = useCallback(async (showSpinner = true) => {
+    if (showSpinner) setLoading(true);
+    try {
+      await Promise.all([
+        loadCompetitions(),
+        loadSubmissions(),
+        loadUsers(),
+        loadFiles(),
+        loadAnnouncements(),
+        loadLoginLogs(),
+      ]);
+    } catch (e) {
+      console.error(e);
+    }
+    if (showSpinner) setLoading(false);
+  }, [loadAnnouncements, loadCompetitions, loadFiles, loadLoginLogs, loadSubmissions, loadUsers]);
+
   useEffect(() => {
     if (status === 'authenticated') {
       if (session?.user?.role !== 'admin') {
@@ -61,32 +113,7 @@ export default function AdminPage() {
     } else if (status === 'unauthenticated') {
       router.push('/login');
     }
-  }, [status, session]);
-
-  const loadData = async () => {
-    setLoading(true);
-    try {
-      const [compRes, subRes, userRes, fileRes, annRes, logRes] = await Promise.all([
-        fetch('/api/competitions'),
-        fetch('/api/submissions'),
-        fetch('/api/admin/users'),
-        fetch('/api/admin/files'),
-        fetch('/api/announcements?all=true'),
-        fetch('/api/admin/login-logs'),
-      ]);
-      setCompetitions(await compRes.json());
-      const subData = await subRes.json();
-      setSubmissions(Array.isArray(subData) ? subData : []);
-      setUsers(await userRes.json());
-      setFiles(await fileRes.json());
-      setAnnouncements(await annRes.json());
-      const logData = await logRes.json();
-      setLoginLogs(Array.isArray(logData) ? logData : []);
-    } catch (e) {
-      console.error(e);
-    }
-    setLoading(false);
-  };
+  }, [status, session, router, loadData]);
 
   const handleCompSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -130,7 +157,7 @@ export default function AdminPage() {
         setCompAttachment(null);
         setCompExtraAttachments([]);
         setRemoveAttachment(false);
-        loadData();
+        Promise.all([loadCompetitions(), loadFiles()]);
       } else {
         const data = await res.json();
         setMessage(data.error || '操作失败');
@@ -144,7 +171,7 @@ export default function AdminPage() {
     if (!confirm('确定删除此赛题？关联的提交也将被删除。')) return;
     try {
       await fetch(`/api/competitions/${id}`, { method: 'DELETE' });
-      loadData();
+      Promise.all([loadCompetitions(), loadSubmissions(), loadFiles()]);
     } catch {}
   };
 
@@ -171,7 +198,7 @@ export default function AdminPage() {
       const data = await res.json();
       if (res.ok) {
         setMessage(`已清理 ${data.deleted} 条旧日志`);
-        loadData();
+        loadLoginLogs();
       } else {
         setMessage(data.error || '清理失败');
       }
@@ -190,8 +217,8 @@ export default function AdminPage() {
       if (res.ok) {
         setGradingId(null);
         setGradeForm({ score: '', feedback: '', award: '', showcased: false });
-        loadData();
         setMessage('评分成功');
+        loadSubmissions();
       }
     } catch {
       setMessage('评分失败');
@@ -232,7 +259,7 @@ export default function AdminPage() {
       if (res.ok) {
         setEditingUser(null);
         setMessage('用户信息更新成功');
-        loadData();
+        loadUsers();
       } else {
         const data = await res.json();
         setMessage(data.error || '更新失败');
@@ -268,7 +295,7 @@ export default function AdminPage() {
       const res = await fetch(`/api/admin/users/${id}`, { method: 'DELETE' });
       if (res.ok) {
         setMessage('用户已删除');
-        loadData();
+        Promise.all([loadUsers(), loadSubmissions(), loadFiles()]);
       } else {
         const data = await res.json();
         setMessage(data.error || '删除失败');
@@ -294,7 +321,7 @@ export default function AdminPage() {
         setShowAnnForm(false);
         setEditingAnn(null);
         setAnnForm({ title: '', content: '', pinned: false, published: true });
-        loadData();
+        loadAnnouncements();
       } else {
         const data = await res.json();
         setMessage(data.error || '操作失败');
@@ -309,7 +336,7 @@ export default function AdminPage() {
     try {
       await fetch(`/api/announcements/${id}`, { method: 'DELETE' });
       setMessage('公告已删除');
-      loadData();
+      loadAnnouncements();
     } catch {}
   };
 
@@ -326,7 +353,7 @@ export default function AdminPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ pinned: !ann.pinned }),
       });
-      loadData();
+      loadAnnouncements();
     } catch {}
   };
 
@@ -337,7 +364,7 @@ export default function AdminPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ published: !ann.published }),
       });
-      loadData();
+      loadAnnouncements();
     } catch {}
   };
 
@@ -351,7 +378,7 @@ export default function AdminPage() {
       });
       if (res.ok) {
         setMessage('文件已删除');
-        loadData();
+        loadFiles();
       } else {
         setMessage('删除失败');
       }
@@ -359,6 +386,26 @@ export default function AdminPage() {
       setMessage('删除失败');
     }
   };
+
+  const subGroupList = useMemo(() => {
+    const q = subSearch.trim().toLowerCase();
+    const filtered = submissions.filter((s: any) => {
+      if (subStatusFilter !== 'all' && s.status !== subStatusFilter) return false;
+      if (!q) return true;
+      return (s.user?.name || '').toLowerCase().includes(q)
+        || (s.user?.email || '').toLowerCase().includes(q)
+        || (s.teamName || '').toLowerCase().includes(q)
+        || (s.user?.school || '').toLowerCase().includes(q);
+    });
+
+    const groups = new Map<string, { competition: any; subs: any[] }>();
+    for (const s of filtered) {
+      const key = s.competitionId;
+      if (!groups.has(key)) groups.set(key, { competition: s.competition, subs: [] });
+      groups.get(key)!.subs.push(s);
+    }
+    return Array.from(groups.entries());
+  }, [subSearch, subStatusFilter, submissions]);
 
   if (status === 'loading' || loading) {
     return <div className="max-w-7xl mx-auto px-4 py-20 text-center text-gray-500">加载中...</div>;
@@ -647,34 +694,11 @@ export default function AdminPage() {
 
           {submissions.length === 0 ? (
             <p className="text-gray-500 text-center py-10 bg-white rounded-2xl border border-gray-200">暂无提交</p>
-          ) : (() => {
-            // 过滤
-            const q = subSearch.trim().toLowerCase();
-            const filtered = submissions.filter((s: any) => {
-              if (subStatusFilter !== 'all' && s.status !== subStatusFilter) return false;
-              if (!q) return true;
-              return (s.user?.name || '').toLowerCase().includes(q)
-                || (s.user?.email || '').toLowerCase().includes(q)
-                || (s.teamName || '').toLowerCase().includes(q)
-                || (s.user?.school || '').toLowerCase().includes(q);
-            });
-
-            // 按赛题分组
-            const groups = new Map<string, { competition: any; subs: any[] }>();
-            for (const s of filtered) {
-              const key = s.competitionId;
-              if (!groups.has(key)) groups.set(key, { competition: s.competition, subs: [] });
-              groups.get(key)!.subs.push(s);
-            }
-            const groupList = Array.from(groups.entries());
-
-            if (groupList.length === 0) {
-              return <p className="text-gray-400 text-center py-12 bg-white rounded-2xl border border-gray-200/80">没有匹配的提交</p>;
-            }
-
-            return (
+          ) : subGroupList.length === 0 ? (
+            <p className="text-gray-400 text-center py-12 bg-white rounded-2xl border border-gray-200/80">没有匹配的提交</p>
+          ) : (
               <div className="space-y-3">
-                {groupList.map(([compId, { competition, subs }]) => {
+                {subGroupList.map(([compId, { competition, subs }]) => {
                   const isExpanded = expandedComps.has(compId);
                   const pendingCount = subs.filter((s: any) => s.status !== 'graded').length;
                   const gradedCount = subs.length - pendingCount;
@@ -868,8 +892,7 @@ export default function AdminPage() {
                   );
                 })}
               </div>
-            );
-          })()}
+          )}
         </div>
       )}
 

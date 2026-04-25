@@ -9,6 +9,27 @@ export const dynamic = 'force-dynamic';
 
 const UPLOAD_DIR = path.join(process.cwd(), 'public', 'uploads');
 
+type UploadFile = { rel: string; full: string; size: number };
+
+async function listUploadFiles(dir = UPLOAD_DIR, prefix = ''): Promise<UploadFile[]> {
+  const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
+  const result: UploadFile[] = [];
+  for (const entry of entries) {
+    const full = path.join(dir, entry.name);
+    const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
+    if (entry.isDirectory()) {
+      result.push(...await listUploadFiles(full, rel));
+      continue;
+    }
+    if (!entry.isFile()) continue;
+    try {
+      const st = await stat(full);
+      result.push({ rel: `uploads/${rel}`.replace(/\\/g, '/'), full, size: st.size });
+    } catch {}
+  }
+  return result;
+}
+
 async function collectReferencedPaths(): Promise<Set<string>> {
   const refs = new Set<string>();
   const [subs, comps] = await Promise.all([
@@ -62,15 +83,12 @@ export async function GET() {
     let totalOrphanSize = 0;
     try {
       const refs = await collectReferencedPaths();
-      const files = await readdir(UPLOAD_DIR).catch(() => [] as string[]);
-      for (const name of files) {
-        const rel = `uploads/${name}`;
-        if (refs.has(rel) || refs.has(name)) continue;
+      const files = await listUploadFiles();
+      for (const file of files) {
+        if (refs.has(file.rel) || refs.has(path.basename(file.rel))) continue;
         try {
-          const st = await stat(path.join(UPLOAD_DIR, name));
-          if (!st.isFile()) continue;
-          orphanFiles.push({ name, size: st.size });
-          totalOrphanSize += st.size;
+          orphanFiles.push({ name: file.rel, size: file.size });
+          totalOrphanSize += file.size;
         } catch {}
       }
     } catch {}
@@ -129,19 +147,15 @@ export async function POST(request: NextRequest) {
 
     if (target === 'orphan_files') {
       const refs = await collectReferencedPaths();
-      const files = await readdir(UPLOAD_DIR).catch(() => [] as string[]);
+      const files = await listUploadFiles();
       let deleted = 0;
       let freedBytes = 0;
-      for (const name of files) {
-        const rel = `uploads/${name}`;
-        if (refs.has(rel) || refs.has(name)) continue;
+      for (const file of files) {
+        if (refs.has(file.rel) || refs.has(path.basename(file.rel))) continue;
         try {
-          const full = path.join(UPLOAD_DIR, name);
-          const st = await stat(full);
-          if (!st.isFile()) continue;
-          await unlink(full);
+          await unlink(file.full);
           deleted++;
-          freedBytes += st.size;
+          freedBytes += file.size;
         } catch {}
       }
       return NextResponse.json({ ok: true, deleted, freedBytes });

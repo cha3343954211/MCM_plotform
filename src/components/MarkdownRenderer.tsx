@@ -4,10 +4,9 @@ import { useMemo } from 'react';
 import { marked } from 'marked';
 import DOMPurify from 'isomorphic-dompurify';
 
-// 全局 marked 配置
-marked.setOptions({
+marked.use({
   gfm: true,
-  breaks: true, // 单回车换行
+  breaks: true,
 });
 
 interface Props {

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { Bell, Check, CheckCheck } from 'lucide-react';
 import { formatDate } from '@/lib/utils';
@@ -21,21 +21,25 @@ export default function NotificationBell() {
   const [open, setOpen] = useState(false);
   const panelRef = useRef<HTMLDivElement | null>(null);
 
-  const load = async () => {
+  const load = useCallback(async () => {
+    if (typeof document !== 'undefined' && document.hidden) return;
     try {
-      const res = await fetch('/api/notifications?limit=10');
+      const res = await fetch('/api/notifications?limit=10', { cache: 'no-store' });
       if (!res.ok) return;
       const data = await res.json();
-      setItems(data.items || []);
-      setUnreadCount(data.unreadCount || 0);
+      setItems((prev) => {
+        const next = data.items || [];
+        return JSON.stringify(prev) === JSON.stringify(next) ? prev : next;
+      });
+      setUnreadCount((prev) => prev === (data.unreadCount || 0) ? prev : (data.unreadCount || 0));
     } catch {}
-  };
+  }, []);
 
   useEffect(() => {
     load();
     const t = setInterval(load, 60_000); // 每 60 秒轮询一次 (2C2G 友好)
     return () => clearInterval(t);
-  }, []);
+  }, [load]);
 
   useEffect(() => {
     const onClick = (e: MouseEvent) => {

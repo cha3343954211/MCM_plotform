@@ -10,7 +10,7 @@ export default function AnnouncementList() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch('/api/announcements')
+    fetch('/api/announcements?limit=5', { cache: 'no-store' })
       .then((res) => res.json())
       .then((data) => { setAnnouncements(Array.isArray(data) ? data : []); setLoading(false); })
       .catch(() => setLoading(false));

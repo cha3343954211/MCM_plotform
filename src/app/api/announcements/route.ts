@@ -7,6 +7,7 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const all = searchParams.get('all') === 'true';
+    const limit = Math.min(Math.max(parseInt(searchParams.get('limit') || '20', 10) || 20, 1), 100);
 
     const session = await getServerSession(authOptions);
     const isAdmin = session?.user?.role === 'admin';
@@ -14,6 +15,7 @@ export async function GET(request: NextRequest) {
     const announcements = await prisma.announcement.findMany({
       where: (all && isAdmin) ? {} : { published: true },
       orderBy: [{ pinned: 'desc' }, { createdAt: 'desc' }],
+      take: (all && isAdmin) ? undefined : limit,
     });
 
     return NextResponse.json(announcements);

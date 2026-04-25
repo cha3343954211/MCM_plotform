@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, ReactNode } from 'react';
 
 export interface SiteConfig {
   siteName: string;
@@ -46,24 +46,27 @@ export function useSiteConfig() {
 export function SiteConfigProvider({ children }: { children: ReactNode }) {
   const [config, setConfig] = useState<SiteConfig>(defaultConfig);
 
-  const refresh = (retries = 2) => {
-    fetch('/api/site-config')
+  const refresh = useCallback((retries = 2) => {
+    fetch('/api/site-config', { cache: 'no-store' })
       .then((r) => { if (!r.ok) throw new Error('fetch failed'); return r.json(); })
       .then((data) => {
-        if (data && data.siteName) setConfig(data);
+        if (data && data.siteName) {
+          setConfig((prev) => JSON.stringify(prev) === JSON.stringify(data) ? prev : data);
+        }
       })
       .catch(() => {
         if (retries > 0) setTimeout(() => refresh(retries - 1), 2000);
       });
-  };
+  }, []);
 
   useEffect(() => {
     refresh();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [refresh]);
+
+  const value = useMemo(() => ({ config, refresh }), [config, refresh]);
 
   return (
-    <SiteConfigContext.Provider value={{ config, refresh }}>
+    <SiteConfigContext.Provider value={value}>
       {config.bannerEnabled && config.bannerText && (
         <div
           className="text-white text-center text-sm py-2 px-4 font-medium"
