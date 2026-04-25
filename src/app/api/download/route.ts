@@ -13,17 +13,23 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: '缺少文件路径' }, { status: 400 });
     }
 
-    // 安全检查: 防止路径遍历攻击
     const normalized = path.normalize(filePath).replace(/\\/g, '/');
     if (normalized.includes('..') || !normalized.startsWith('/uploads/')) {
       return NextResponse.json({ error: '非法路径' }, { status: 403 });
     }
 
-    const absolutePath = path.join(process.cwd(), 'public', normalized);
+    const uploadRoot = path.resolve(process.cwd(), 'public', 'uploads');
+    const absolutePath = path.resolve(process.cwd(), 'public', `.${normalized}`);
+    if (!absolutePath.startsWith(uploadRoot + path.sep) && absolutePath !== uploadRoot) {
+      return NextResponse.json({ error: '非法路径' }, { status: 403 });
+    }
 
     // 检查文件是否存在
     try {
-      await stat(absolutePath);
+      const fileStat = await stat(absolutePath);
+      if (!fileStat.isFile()) {
+        return NextResponse.json({ error: '文件不存在' }, { status: 404 });
+      }
     } catch {
       return NextResponse.json({ error: '文件不存在' }, { status: 404 });
     }

@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
     }
 
     const { searchParams } = new URL(request.url);
-    const limit = Math.min(parseInt(searchParams.get('limit') || '200', 10), 1000);
+    const limit = Math.min(Math.max(parseInt(searchParams.get('limit') || '200', 10) || 200, 1), 1000);
     const successParam = searchParams.get('success');
     const emailFilter = searchParams.get('email') || undefined;
 
@@ -42,7 +42,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     const { searchParams } = new URL(request.url);
-    const days = parseInt(searchParams.get('days') || '30', 10);
+    const days = Math.max(parseInt(searchParams.get('days') || '30', 10) || 30, 1);
     const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
 
     const result = await (prisma as any).loginLog.deleteMany({

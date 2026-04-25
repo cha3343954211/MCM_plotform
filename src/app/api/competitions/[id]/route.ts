@@ -12,15 +12,28 @@ async function getMaxFileSize(): Promise<number> {
   } catch { return 10 * 1024 * 1024; }
 }
 
+function safeExt(name: string) {
+  const ext = path.extname(name || '').toLowerCase();
+  return /^[a-z0-9.]{1,12}$/.test(ext) ? ext : '';
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
+    const session = await getServerSession(authOptions);
     const competition = await prisma.competition.findUnique({
       where: { id: params.id },
       include: {
         submissions: {
+          where: session?.user?.role === 'admin'
+            ? undefined
+            : session?.user?.id
+              ? { userId: session.user.id }
+              : { id: '__none__' },
+          orderBy: { createdAt: 'desc' },
+          take: session?.user?.role === 'admin' ? 200 : 10,
           include: { user: { select: { id: true, name: true, email: true, school: true } } },
         },
         _count: { select: { submissions: true } },
@@ -81,8 +94,8 @@ export async function PUT(
       if (existing?.attachmentPath) {
         try { await unlink(path.join(process.cwd(), 'public', existing.attachmentPath)); } catch {}
       }
-      const ext = path.extname(file.name);
-      const fileName = `comp_${Date.now()}${ext}`;
+      const ext = safeExt(file.name);
+      const fileName = `comp_${Date.now()}_${Math.random().toString(36).slice(2, 8)}${ext}`;
       const filePath = path.join(uploadDir, fileName);
       const bytes = await file.arrayBuffer();
       await writeFile(filePath, Buffer.from(bytes));
@@ -108,8 +121,8 @@ export async function PUT(
         if (ef.size > MAX_FILE_SIZE) {
           return NextResponse.json({ error: `附件 "${ef.name}" 大小不能超过${maxMB}MB` }, { status: 400 });
         }
-        const ext = path.extname(ef.name);
-        const fileName = `comp_${Date.now()}_${i}${ext}`;
+        const ext = safeExt(ef.name);
+        const fileName = `comp_${Date.now()}_${i}_${Math.random().toString(36).slice(2, 8)}${ext}`;
         const filePath = path.join(uploadDir, fileName);
         const bytes = await ef.arrayBuffer();
         await writeFile(filePath, Buffer.from(bytes));

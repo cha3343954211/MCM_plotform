@@ -12,6 +12,11 @@ async function getMaxFileSize(): Promise<number> {
   } catch { return 10 * 1024 * 1024; }
 }
 
+function safeExt(name: string) {
+  const ext = path.extname(name || '').toLowerCase();
+  return /^[a-z0-9.]{1,12}$/.test(ext) ? ext : '';
+}
+
 export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -95,8 +100,8 @@ export async function POST(request: NextRequest) {
     const uploadDir = path.join(process.cwd(), 'public', 'uploads');
     await mkdir(uploadDir, { recursive: true });
 
-    const ext = path.extname(file.name);
-    const fileName = `${session.user.id}_${competitionId}_${Date.now()}${ext}`;
+    const ext = safeExt(file.name);
+    const fileName = `${session.user.id}_${competitionId}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}${ext}`;
     const filePath = path.join(uploadDir, fileName);
 
     const bytes = await file.arrayBuffer();
@@ -110,8 +115,8 @@ export async function POST(request: NextRequest) {
         if (ef.size > MAX_FILE_SIZE) {
           return NextResponse.json({ error: `文件 "${ef.name}" 大小不能超过${maxMB}MB` }, { status: 400 });
         }
-        const efExt = path.extname(ef.name);
-        const efName = `${session.user.id}_${competitionId}_${Date.now()}_${i}${efExt}`;
+        const efExt = safeExt(ef.name);
+        const efName = `${session.user.id}_${competitionId}_${Date.now()}_${i}_${Math.random().toString(36).slice(2, 8)}${efExt}`;
         const efPath = path.join(uploadDir, efName);
         const efBytes = await ef.arrayBuffer();
         await writeFile(efPath, Buffer.from(efBytes));

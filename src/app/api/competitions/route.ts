@@ -12,6 +12,11 @@ async function getMaxFileSize(): Promise<number> {
   } catch { return 10 * 1024 * 1024; }
 }
 
+function safeExt(name: string) {
+  const ext = path.extname(name || '').toLowerCase();
+  return /^[a-z0-9.]{1,12}$/.test(ext) ? ext : '';
+}
+
 export async function GET() {
   try {
     const competitions = await prisma.competition.findMany({
@@ -58,8 +63,8 @@ export async function POST(request: NextRequest) {
       if (file.size > MAX_FILE_SIZE) {
         return NextResponse.json({ error: `附件大小不能超过${maxMB}MB` }, { status: 400 });
       }
-      const ext = path.extname(file.name);
-      const fileName = `comp_${Date.now()}${ext}`;
+      const ext = safeExt(file.name);
+      const fileName = `comp_${Date.now()}_${Math.random().toString(36).slice(2, 8)}${ext}`;
       const filePath = path.join(uploadDir, fileName);
       const bytes = await file.arrayBuffer();
       await writeFile(filePath, Buffer.from(bytes));
@@ -75,8 +80,8 @@ export async function POST(request: NextRequest) {
         if (ef.size > MAX_FILE_SIZE) {
           return NextResponse.json({ error: `附件 "${ef.name}" 大小不能超过${maxMB}MB` }, { status: 400 });
         }
-        const ext = path.extname(ef.name);
-        const fileName = `comp_${Date.now()}_${i}${ext}`;
+        const ext = safeExt(ef.name);
+        const fileName = `comp_${Date.now()}_${i}_${Math.random().toString(36).slice(2, 8)}${ext}`;
         const filePath = path.join(uploadDir, fileName);
         const bytes = await ef.arrayBuffer();
         await writeFile(filePath, Buffer.from(bytes));
