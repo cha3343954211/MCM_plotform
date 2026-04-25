@@ -1285,6 +1285,9 @@ export default function AdminPage() {
         </div>
       )}
 
+      {/* ===== 数据清理 ===== */}
+      {tab === 'cleanup' && <CleanupPanel onMessage={setMessage} />}
+
       {/* ===== 通知发送 ===== */}
       {tab === 'notifications' && (
         <div className="space-y-6">
