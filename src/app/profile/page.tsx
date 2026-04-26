@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { User, Mail, Building2, CreditCard, Phone, Lock, Save, Shield, BarChart3, ChevronRight } from 'lucide-react';
 import Link from 'next/link';
 import { formatDate } from '@/lib/utils';
+import { isAdminRole, roleLabel } from '@/lib/roles';
 
 export default function ProfilePage() {
   const { data: session, status } = useSession();
@@ -149,9 +150,9 @@ export default function ProfilePage() {
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
               <h2 className="text-lg font-semibold text-gray-900 truncate">{profile.name}</h2>
-              {profile.role === 'admin' && (
+              {isAdminRole(profile.role) && (
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-semibold bg-amber-50 text-amber-600 ring-1 ring-amber-200/50">
-                  <Shield className="w-3 h-3" /> 管理员
+                  <Shield className="w-3 h-3" /> {roleLabel(profile.role)}
                 </span>
               )}
             </div>

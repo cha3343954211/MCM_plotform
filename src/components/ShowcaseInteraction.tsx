@@ -5,6 +5,7 @@ import { useSession } from 'next-auth/react';
 import { Heart, MessageCircle, Send, EyeOff, Eye, Trash2 } from 'lucide-react';
 import { formatDate } from '@/lib/utils';
 import { useSiteConfig } from './SiteConfigProvider';
+import { isAdminRole } from '@/lib/roles';
 
 interface Comment {
   id: string;
@@ -18,7 +19,7 @@ interface Comment {
 export default function ShowcaseInteraction({ submissionId }: { submissionId: string }) {
   const { data: session } = useSession();
   const { config } = useSiteConfig();
-  const isAdmin = session?.user?.role === 'admin';
+  const isAdmin = isAdminRole(session?.user?.role);
   const interactionEnabled = (config as any).commentsEnabled !== false;
 
   const [likeCount, setLikeCount] = useState(0);

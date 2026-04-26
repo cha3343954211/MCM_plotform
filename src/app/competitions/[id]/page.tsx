@@ -6,6 +6,7 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Calendar, Clock, Upload, FileText, ArrowLeft, Paperclip, Plus, X, Timer } from 'lucide-react';
 import { formatDate, getStatusLabel, getStatusColor } from '@/lib/utils';
+import { isAdminRole } from '@/lib/roles';
 import { useSiteConfig } from '@/components/SiteConfigProvider';
 import MarkdownRenderer from '@/components/MarkdownRenderer';
 
@@ -297,11 +298,11 @@ export default function CompetitionDetailPage() {
         <div className="glass-card rounded-3xl p-8 md:p-10">
           <h2 className="text-lg font-semibold mb-6 flex items-center gap-2 tracking-tight">
             <FileText className="w-5 h-5" style={{ color: config.primaryColor }} />
-            {session.user.role === 'admin' ? '所有提交' : '我的提交'}
+            {isAdminRole(session.user.role) ? '所有提交' : '我的提交'}
           </h2>
           <div className="space-y-3">
             {competition.submissions
-              .filter((s: any) => session.user.role === 'admin' || s.userId === session.user.id)
+              .filter((s: any) => isAdminRole(session.user.role) || s.userId === session.user.id)
               .map((sub: any) => (
                 <div key={sub.id} className="p-4 rounded-2xl bg-black/[0.02] border border-white/40 transition-all duration-300 hover:bg-black/[0.04]">
                   <div className="flex items-center justify-between mb-2">
@@ -311,7 +312,7 @@ export default function CompetitionDetailPage() {
                     </span>
                   </div>
                   {sub.teamName && <p className="text-sm text-gray-400">团队: {sub.teamName}</p>}
-                  {session.user.role === 'admin' && <p className="text-sm text-gray-400">提交者: {sub.user?.name} ({sub.user?.email})</p>}
+                  {isAdminRole(session.user.role) && <p className="text-sm text-gray-400">提交者: {sub.user?.name} ({sub.user?.email})</p>}
                   <p className="text-xs text-gray-300 mt-1">提交时间: {formatDate(sub.createdAt)}</p>
                   {sub.score !== null && sub.score !== undefined && (
                     <div className="mt-2 p-3 rounded-2xl" style={{ background: `${config.primaryColor}08` }}>
