@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useSession, signOut } from 'next-auth/react';
 import { useState, useEffect } from 'react';
 import { usePathname } from 'next/navigation';
-import { Menu, X, BookOpen, User, LogOut, Shield, Trophy, Users, Award } from 'lucide-react';
+import { Menu, X, BookOpen, User, LogOut, Shield, Trophy, Users, Award, HelpCircle } from 'lucide-react';
 import { useSiteConfig } from './SiteConfigProvider';
 import NotificationBell from './NotificationBell';
 import { canReview, isAdminRole, roleLabel } from '@/lib/roles';
@@ -38,6 +38,7 @@ export default function Navbar() {
 
   const navLinks = [
     { href: '/competitions', label: '赛题列表', show: true },
+    { href: '/guide', label: '使用说明', show: true, icon: HelpCircle },
     { href: '/showcase', label: '论文公示', show: true, icon: Trophy },
     { href: '/teams', label: '我的团队', show: !!session, icon: Users },
     { href: '/my-submissions', label: '我的提交', show: !!session },

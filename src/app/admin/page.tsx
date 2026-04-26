@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
-import { Shield, Plus, FileText, Users, ChevronDown, ChevronUp, Download, Save, Trash2, Edit3, HardDrive, Upload, X, Paperclip, Megaphone, Pin, Settings, FileDown, Activity, CheckCircle2, XCircle, Key, Sparkles, Send, Bell, Search, BarChart3, Layers } from 'lucide-react';
+import { Shield, Plus, FileText, Users, ChevronDown, ChevronUp, Download, Save, Trash2, Edit3, HardDrive, Upload, X, Paperclip, Megaphone, Pin, Settings, FileDown, Activity, CheckCircle2, XCircle, Key, Sparkles, Send, Bell, Search, BarChart3, Layers, HelpCircle } from 'lucide-react';
 import MarkdownEditor from '@/components/MarkdownEditor';
 import { formatDate, getStatusLabel, getStatusColor, AWARD_OPTIONS, getAwardLabel, getAwardColor, GRADIENT_PRESETS, buildHeroGradient } from '@/lib/utils';
 import { canReview, isAdminRole, isSuperAdminRole, roleLabel } from '@/lib/roles';
@@ -26,7 +26,7 @@ export default function AdminPage() {
   const router = useRouter();
   const canReviewSubmissions = canReview(session?.user?.role);
   const canAward = isSuperAdminRole(session?.user?.role);
-  const [tab, setTab] = useState<'dashboard' | 'competitions' | 'templates' | 'submissions' | 'teams' | 'users' | 'files' | 'announcements' | 'loginLogs' | 'cleanup' | 'settings' | 'notifications'>('dashboard');
+  const [tab, setTab] = useState<'dashboard' | 'competitions' | 'templates' | 'submissions' | 'teams' | 'users' | 'files' | 'announcements' | 'loginLogs' | 'cleanup' | 'settings' | 'notifications' | 'guide'>('dashboard');
   const [siteConfigForm, setSiteConfigForm] = useState({
     siteName: '', siteDesc: '', heroTitle: '', heroDesc: '', footerText: '', primaryColor: '#2563eb', secondaryColor: '', gradientEnabled: false, gradientAngle: 160, logoUrl: '', bannerText: '', bannerEnabled: false, maxFileSize: 10, maxSubmissionVersions: 5, commentsEnabled: true,
   });
@@ -1768,6 +1768,9 @@ export default function AdminPage() {
         />
       )}
 
+      {/* ===== 管理员使用说明 ===== */}
+      {tab === 'guide' && <AdminGuidePanel />}
+
       {/* ===== 总览 ===== */}
       {tab === 'dashboard' && <DashboardPanel onJump={(t: string) => setTab(t as any)} />}
 
@@ -2365,6 +2368,83 @@ function SiteSettingsPanel({ form, setForm, loaded, setLoaded, setMessage }: {
           <Save className="w-4 h-4" />
           保存设置
         </button>
+      </div>
+    </div>
+  );
+}
+
+function AdminGuidePanel() {
+  const groups = [
+    {
+      title: '赛题发布与配置',
+      items: [
+        '在赛题管理中创建赛题，填写标题、简介、详情、开始/截止时间和状态。',
+        '发布赛题时设置每队人数上限，用户创建团队会自动使用该配置。',
+        '可上传主附件和多个附加附件，编辑时可保留或移除原附件。',
+      ],
+    },
+    {
+      title: '提交评审与获奖公示',
+      items: [
+        '提交评审中按赛题查看用户或团队提交，支持评分、评语和奖项设置。',
+        '管理员可下载主文件和附件，评委可按权限进入评委工作台评分。',
+        '设置获奖和公示后，用户可在我的提交中查看成绩并打印/保存证书。',
+      ],
+    },
+    {
+      title: '团队与用户管理',
+      items: [
+        '团队管理按赛题分组展示，可查看成员、邀请码和提交记录。',
+        '用户管理支持修改资料、角色、重置密码和删除异常账号。',
+        '处理用户问题前优先确认其登录邮箱、所属赛题和团队状态。',
+      ],
+    },
+    {
+      title: '公告、通知与站点设置',
+      items: [
+        '公告管理用于发布面向全站用户的通知，可置顶或下架。',
+        '通知发送支持全体用户或指定用户发送站内通知。',
+        '站点设置可调整站点名称、首页文案、主题色、文件大小和提交版本上限。',
+      ],
+    },
+    {
+      title: '稳定性与运维建议',
+      items: [
+        '涉及数据库结构更新后，服务器需执行 prisma generate 和 prisma db push。',
+        '大文件上传异常时检查站点文件大小限制、服务器磁盘空间和上传目录权限。',
+        '定期查看文件存储和登录日志，清理无效文件与过旧日志。',
+      ],
+    },
+  ];
+
+  return (
+    <div className="space-y-6">
+      <div className="glass-card rounded-3xl p-8">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-2xl bg-blue-50 flex items-center justify-center">
+            <HelpCircle className="w-5 h-5 text-blue-600" />
+          </div>
+          <div>
+            <h2 className="text-xl font-semibold text-gray-900">管理员平台使用说明</h2>
+            <p className="text-sm text-gray-400 mt-1">面向平台管理员的核心功能、操作路径与稳定性建议</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid md:grid-cols-2 gap-4">
+        {groups.map((group) => (
+          <div key={group.title} className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm">
+            <h3 className="font-semibold text-gray-900 mb-3">{group.title}</h3>
+            <ul className="space-y-2">
+              {group.items.map((item) => (
+                <li key={item} className="flex gap-2 text-sm text-gray-500 leading-6">
+                  <CheckCircle2 className="w-4 h-4 text-green-500 mt-1 flex-shrink-0" />
+                  <span>{item}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
       </div>
     </div>
   );
