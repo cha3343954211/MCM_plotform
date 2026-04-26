@@ -45,6 +45,8 @@ export default function AdminPage() {
   const [gradeForm, setGradeForm] = useState({ score: '', feedback: '', award: '', showcased: false });
   const [subSearch, setSubSearch] = useState('');
   const [subStatusFilter, setSubStatusFilter] = useState<'all' | 'pending' | 'graded'>('all');
+  const [teamSearch, setTeamSearch] = useState('');
+  const [teamCompetitionFilter, setTeamCompetitionFilter] = useState('all');
   const [expandedComps, setExpandedComps] = useState<Set<string>>(new Set());
   // 批量操作
   const [selectedSubs, setSelectedSubs] = useState<Set<string>>(new Set());
@@ -453,6 +455,24 @@ export default function AdminPage() {
     }
     return Array.from(groups.entries());
   }, [subSearch, subStatusFilter, submissions]);
+
+  const filteredTeams = useMemo(() => {
+    const q = teamSearch.trim().toLowerCase();
+    return teams.filter((team: any) => {
+      if (teamCompetitionFilter !== 'all' && team.competitionId !== teamCompetitionFilter) return false;
+      if (!q) return true;
+      return (team.name || '').toLowerCase().includes(q)
+        || (team.inviteCode || '').toLowerCase().includes(q)
+        || (team.leader?.name || '').toLowerCase().includes(q)
+        || (team.leader?.email || '').toLowerCase().includes(q)
+        || (team.competition?.title || '').toLowerCase().includes(q)
+        || (team.members || []).some((m: any) =>
+          (m.user?.name || '').toLowerCase().includes(q)
+          || (m.user?.email || '').toLowerCase().includes(q)
+          || (m.user?.school || '').toLowerCase().includes(q)
+        );
+    });
+  }, [teamCompetitionFilter, teamSearch, teams]);
 
   if (status === 'loading' || loading) {
     return <div className="max-w-7xl mx-auto px-4 py-20 text-center text-gray-500">加载中...</div>;
@@ -988,12 +1008,34 @@ export default function AdminPage() {
             </button>
           </div>
 
+          <div className="bg-white rounded-xl border border-gray-200 p-4 mb-4 grid md:grid-cols-3 gap-3">
+            <div className="relative md:col-span-2">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300" />
+              <input
+                value={teamSearch}
+                onChange={(e) => setTeamSearch(e.target.value)}
+                placeholder="搜索团队名、邀请码、队长、成员、学校或赛题"
+                className="w-full pl-9 pr-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-gray-400 transition"
+              />
+            </div>
+            <select
+              value={teamCompetitionFilter}
+              onChange={(e) => setTeamCompetitionFilter(e.target.value)}
+              className="px-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-gray-400 transition"
+            >
+              <option value="all">全部赛题</option>
+              {competitions.map((c: any) => (
+                <option key={c.id} value={c.id}>{c.title}</option>
+              ))}
+            </select>
+          </div>
+
           <div className="grid gap-4">
-            {teams.length === 0 ? (
+            {filteredTeams.length === 0 ? (
               <div className="bg-white rounded-xl border border-gray-200 p-10 text-center text-gray-400">
                 暂无团队
               </div>
-            ) : teams.map((team: any) => (
+            ) : filteredTeams.map((team: any) => (
               <div key={team.id} className="bg-white rounded-xl border border-gray-200 p-5">
                 <div className="flex flex-wrap items-start justify-between gap-4 mb-4">
                   <div>
@@ -1004,6 +1046,7 @@ export default function AdminPage() {
                       </span>
                     </div>
                     <p className="text-sm text-gray-500 mt-1">赛题：{team.competition?.title || '-'}</p>
+                    <p className="text-sm text-gray-500 mt-1">队长：{team.leader?.name || '-'} {team.leader?.email ? `(${team.leader.email})` : ''}</p>
                     <p className="text-xs text-gray-400 mt-1">创建时间：{formatDate(team.createdAt)}</p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">

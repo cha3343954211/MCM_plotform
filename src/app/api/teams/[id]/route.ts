@@ -40,7 +40,10 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: '请先登录' }, { status: 401 });
 
-  const team = await (prisma as any).team.findUnique({ where: { id: params.id } });
+  const team = await (prisma as any).team.findUnique({
+    where: { id: params.id },
+    include: { members: true, competition: { select: { title: true } } },
+  });
   if (!team) return NextResponse.json({ error: '团队不存在' }, { status: 404 });
 
   const isLeader = team.leaderId === session.user.id;
@@ -52,16 +55,60 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   // 移除成员
   if (body.action === 'kick' && typeof body.userId === 'string') {
     if (body.userId === team.leaderId) return NextResponse.json({ error: '不能移除队长' }, { status: 400 });
+    const target = team.members.find((m: any) => m.userId === body.userId);
+    if (!target) return NextResponse.json({ error: '成员不存在' }, { status: 404 });
     await (prisma as any).teamMember.delete({
       where: { teamId_userId: { teamId: team.id, userId: body.userId } },
     });
+    await (prisma as any).notification.create({
+      data: {
+        userId: body.userId,
+        type: 'system',
+        title: '已被移出团队',
+        content: `你已被移出团队《${team.name}》`,
+        link: '/teams',
+      },
+    }).catch(() => {});
+    return NextResponse.json({ ok: true });
+  }
+
+  if (body.action === 'transfer' && typeof body.userId === 'string') {
+    if (body.userId === team.leaderId) return NextResponse.json({ error: '该成员已经是队长' }, { status: 400 });
+    const target = team.members.find((m: any) => m.userId === body.userId);
+    if (!target) return NextResponse.json({ error: '只能转让给团队成员' }, { status: 400 });
+    await prisma.$transaction([
+      (prisma as any).team.update({ where: { id: team.id }, data: { leaderId: body.userId } }),
+      (prisma as any).teamMember.update({
+        where: { teamId_userId: { teamId: team.id, userId: team.leaderId } },
+        data: { role: 'member' },
+      }),
+      (prisma as any).teamMember.update({
+        where: { teamId_userId: { teamId: team.id, userId: body.userId } },
+        data: { role: 'leader' },
+      }),
+    ]);
+    await (prisma as any).notification.create({
+      data: {
+        userId: body.userId,
+        type: 'system',
+        title: '你已成为队长',
+        content: `你已成为团队《${team.name}》的新队长`,
+        link: '/teams',
+      },
+    }).catch(() => {});
     return NextResponse.json({ ok: true });
   }
 
   // 修改信息
   const data: any = {};
   if (typeof body.name === 'string' && body.name.trim()) data.name = body.name.trim().slice(0, 50);
-  if (typeof body.maxMembers === 'number') data.maxMembers = Math.max(1, Math.min(20, body.maxMembers));
+  if (typeof body.maxMembers === 'number') {
+    const maxMembers = Math.max(1, Math.min(20, body.maxMembers));
+    if (maxMembers < team.members.length) {
+      return NextResponse.json({ error: `人数上限不能小于当前成员数 ${team.members.length}` }, { status: 400 });
+    }
+    data.maxMembers = maxMembers;
+  }
   if (Object.keys(data).length === 0) return NextResponse.json({ error: '无可更新字段' }, { status: 400 });
 
   const updated = await (prisma as any).team.update({ where: { id: team.id }, data });

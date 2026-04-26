@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Users, Plus, Copy, LogOut, Trash2, Crown, ChevronRight, FileText } from 'lucide-react';
+import { Users, Plus, Copy, LogOut, Trash2, Crown, ChevronRight, FileText, Edit3, UserMinus, ArrowRightLeft } from 'lucide-react';
 import { formatDate } from '@/lib/utils';
 
 export default function TeamsPage() {
@@ -17,6 +17,8 @@ export default function TeamsPage() {
   const [showJoin, setShowJoin] = useState(false);
   const [createForm, setCreateForm] = useState({ name: '', competitionId: '', maxMembers: 5 });
   const [joinCode, setJoinCode] = useState('');
+  const [editingTeamId, setEditingTeamId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState({ name: '', maxMembers: 5 });
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
@@ -92,6 +94,54 @@ export default function TeamsPage() {
     const res = await fetch(`/api/teams/${teamId}?action=${action}`, { method: 'DELETE' });
     if (res.ok) { setMsg({ type: 'ok', text: isLeader ? '已解散' : '已退出' }); reload(); }
     else { const d = await res.json().catch(() => ({})); setMsg({ type: 'err', text: d.error || '操作失败' }); }
+  };
+
+  const startEditTeam = (team: any) => {
+    setEditingTeamId(team.id);
+    setEditForm({ name: team.name || '', maxMembers: team.maxMembers || 5 });
+  };
+
+  const saveTeam = async (teamId: string) => {
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/teams/${teamId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(editForm),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (res.ok) {
+        setMsg({ type: 'ok', text: '团队信息已更新' });
+        setEditingTeamId(null);
+        reload();
+      } else {
+        setMsg({ type: 'err', text: d.error || '更新失败' });
+      }
+    } finally { setBusy(false); }
+  };
+
+  const kickMember = async (teamId: string, userId: string, name?: string) => {
+    if (!confirm(`确定移除成员 ${name || ''}？`)) return;
+    const res = await fetch(`/api/teams/${teamId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'kick', userId }),
+    });
+    const d = await res.json().catch(() => ({}));
+    if (res.ok) { setMsg({ type: 'ok', text: '成员已移除' }); reload(); }
+    else setMsg({ type: 'err', text: d.error || '移除失败' });
+  };
+
+  const transferLeader = async (teamId: string, userId: string, name?: string) => {
+    if (!confirm(`确定将队长转让给 ${name || '该成员'}？`)) return;
+    const res = await fetch(`/api/teams/${teamId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'transfer', userId }),
+    });
+    const d = await res.json().catch(() => ({}));
+    if (res.ok) { setMsg({ type: 'ok', text: '队长已转让' }); reload(); }
+    else setMsg({ type: 'err', text: d.error || '转让失败' });
   };
 
   const copyCode = (code: string) => {
@@ -224,12 +274,43 @@ export default function TeamsPage() {
                   创建于 {formatDate(team.createdAt)}
                 </div>
 
+                {isLeader && editingTeamId === team.id && (
+                  <div className="mt-3 p-3 bg-blue-50/60 rounded-xl border border-blue-100 space-y-2">
+                    <input value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                      className="w-full px-3 py-2 text-sm bg-white border border-blue-100 rounded-lg outline-none"
+                      placeholder="团队名称" maxLength={50} />
+                    <div className="flex flex-wrap items-center gap-2">
+                      <label className="text-xs text-blue-700">人数上限</label>
+                      <input type="number" min={team.members?.length || 1} max={20}
+                        value={editForm.maxMembers}
+                        onChange={(e) => setEditForm({ ...editForm, maxMembers: Math.max(team.members?.length || 1, Math.min(20, parseInt(e.target.value) || 5)) })}
+                        className="w-24 px-2 py-1.5 text-sm bg-white border border-blue-100 rounded-lg outline-none" />
+                      <button onClick={() => saveTeam(team.id)} disabled={busy}
+                        className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded-lg disabled:opacity-50">保存</button>
+                      <button onClick={() => setEditingTeamId(null)}
+                        className="px-3 py-1.5 text-xs bg-white text-gray-600 rounded-lg border border-gray-200">取消</button>
+                    </div>
+                  </div>
+                )}
+
                 <div className="flex flex-wrap gap-1 mt-3">
                   {team.members?.map((mb: any) => (
-                    <span key={mb.userId} className={`px-2 py-0.5 text-[11px] rounded-lg ring-1 ${
+                    <span key={mb.userId} className={`inline-flex items-center gap-1 px-2 py-0.5 text-[11px] rounded-lg ring-1 ${
                       mb.role === 'leader' ? 'bg-amber-50 text-amber-700 ring-amber-200/50' : 'bg-gray-50 text-gray-600 ring-gray-200/50'
                     }`}>
                       {mb.user?.name}{mb.role === 'leader' ? ' · 队长' : ''}
+                      {isLeader && mb.role !== 'leader' && (
+                        <>
+                          <button onClick={() => transferLeader(team.id, mb.userId, mb.user?.name)}
+                            className="ml-1 text-blue-500 hover:text-blue-700" title="转让队长">
+                            <ArrowRightLeft className="w-3 h-3" />
+                          </button>
+                          <button onClick={() => kickMember(team.id, mb.userId, mb.user?.name)}
+                            className="text-red-500 hover:text-red-700" title="移除成员">
+                            <UserMinus className="w-3 h-3" />
+                          </button>
+                        </>
+                      )}
                     </span>
                   ))}
                 </div>
@@ -244,6 +325,12 @@ export default function TeamsPage() {
                     className="inline-flex items-center gap-1 px-2.5 py-1 text-xs bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-lg">
                     <FileText className="w-3 h-3" /> 提交
                   </Link>
+                  {isLeader && (
+                    <button onClick={() => startEditTeam(team)}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 text-xs bg-amber-50 text-amber-700 hover:bg-amber-100 rounded-lg">
+                      <Edit3 className="w-3 h-3" /> 编辑
+                    </button>
+                  )}
                   <button onClick={() => leave(team.id, isLeader)}
                     className="ml-auto inline-flex items-center gap-1 px-2.5 py-1 text-xs text-red-600 hover:bg-red-50 rounded-lg">
                     {isLeader ? <Trash2 className="w-3 h-3" /> : <LogOut className="w-3 h-3" />}
