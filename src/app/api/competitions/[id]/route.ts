@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
+import { isAdminRole } from '@/lib/roles';
 import { writeFile, mkdir, unlink } from 'fs/promises';
 import path from 'path';
 
@@ -27,13 +28,13 @@ export async function GET(
       where: { id: params.id },
       include: {
         submissions: {
-          where: session?.user?.role === 'admin'
+          where: isAdminRole(session?.user?.role)
             ? undefined
             : session?.user?.id
               ? { userId: session.user.id }
               : { id: '__none__' },
           orderBy: { createdAt: 'desc' },
-          take: session?.user?.role === 'admin' ? 200 : 10,
+          take: isAdminRole(session?.user?.role) ? 200 : 10,
           include: { user: { select: { id: true, name: true, email: true, school: true } } },
         },
         _count: { select: { submissions: true } },
@@ -56,7 +57,7 @@ export async function PUT(
 ) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session || session.user.role !== 'admin') {
+    if (!session || !isAdminRole(session.user.role)) {
       return NextResponse.json({ error: '无权限' }, { status: 403 });
     }
 
@@ -149,7 +150,7 @@ export async function DELETE(
 ) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session || session.user.role !== 'admin') {
+    if (!session || !isAdminRole(session.user.role)) {
       return NextResponse.json({ error: '无权限' }, { status: 403 });
     }
 

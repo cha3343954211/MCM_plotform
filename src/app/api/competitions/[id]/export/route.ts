@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
+import { isAdminRole } from '@/lib/roles';
 import { tryAcquireExportLock, releaseExportLock } from '@/lib/exportLock';
 import path from 'path';
 import { createReadStream, statSync } from 'fs';
@@ -26,8 +27,8 @@ function csvEscape(v: any): string {
 
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
   const session = await getServerSession(authOptions);
-  // 授权：admin 或 judge（judge 角色 PR-3 引入，提前兼容）
-  if (!session || (session.user.role !== 'admin' && session.user.role !== 'judge')) {
+  // 授权：admin / super_admin 或 judge
+  if (!session || (!isAdminRole(session.user.role) && session.user.role !== 'judge')) {
     return new Response(JSON.stringify({ error: '无权限' }), {
       status: 403,
       headers: { 'Content-Type': 'application/json' },

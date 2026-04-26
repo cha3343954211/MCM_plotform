@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
+import { isAdminRole } from '@/lib/roles';
 import { readdir, stat, unlink } from 'fs/promises';
 import path from 'path';
 
@@ -36,7 +37,7 @@ async function scanDir(dirPath: string, category: string, basePath: string): Pro
 export async function GET() {
   try {
     const session = await getServerSession(authOptions);
-    if (!session || session.user.role !== 'admin') {
+    if (!session || !isAdminRole(session.user.role)) {
       return NextResponse.json({ error: '无权限' }, { status: 403 });
     }
 
@@ -67,7 +68,7 @@ export async function GET() {
 export async function DELETE(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session || session.user.role !== 'admin') {
+    if (!session || !isAdminRole(session.user.role)) {
       return NextResponse.json({ error: '无权限' }, { status: 403 });
     }
 

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
+import { isAdminRole } from '@/lib/roles';
 
 export async function GET(request: NextRequest) {
   try {
@@ -10,7 +11,7 @@ export async function GET(request: NextRequest) {
     const limit = Math.min(Math.max(parseInt(searchParams.get('limit') || '20', 10) || 20, 1), 100);
 
     const session = await getServerSession(authOptions);
-    const isAdmin = session?.user?.role === 'admin';
+    const isAdmin = isAdminRole(session?.user?.role);
 
     const announcements = await prisma.announcement.findMany({
       where: (all && isAdmin) ? {} : { published: true },
@@ -27,7 +28,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session || session.user.role !== 'admin') {
+    if (!session || !isAdminRole(session.user.role)) {
       return NextResponse.json({ error: '无权限' }, { status: 403 });
     }
 

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
+import { isAdminRole } from '@/lib/roles';
 import { rateLimit } from '@/lib/rateLimit';
 
 export const dynamic = 'force-dynamic';
@@ -9,7 +10,7 @@ export const dynamic = 'force-dynamic';
 // GET: 列出公示作品的评论（隐藏的对普通用户不可见，admin 全可见）
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
   const session = await getServerSession(authOptions);
-  const isAdmin = session?.user?.role === 'admin';
+  const isAdmin = isAdminRole(session?.user?.role);
 
   const sub = await prisma.submission.findUnique({
     where: { id: params.id },

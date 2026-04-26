@@ -2,13 +2,14 @@ import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
+import { isAdminRole, roleLabel } from '@/lib/roles';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
   try {
     const session = await getServerSession(authOptions);
-    if (!session || (session.user as any).role !== 'admin') {
+    if (!session || !isAdminRole((session.user as any).role)) {
       return NextResponse.json({ error: '无权限' }, { status: 403 });
     }
 
@@ -33,7 +34,7 @@ export async function GET() {
     const rows = users.map((u) => [
       u.name,
       u.email,
-      u.role === 'admin' ? '管理员' : '用户',
+      roleLabel(u.role),
       u.school || '',
       u.studentId || '',
       u.phone || '',
