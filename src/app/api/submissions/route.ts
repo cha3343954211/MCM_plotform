@@ -52,10 +52,12 @@ export async function GET(request: NextRequest) {
     const userIdFilter = searchParams.get('userId') || undefined;
 
     const where: any = {};
-    if (session.user.role !== 'admin') {
+    if (session.user.role === 'admin') {
+      if (userIdFilter) where.userId = userIdFilter;
+    } else if (session.user.role === 'judge') {
+      // 评委可以看到所有提交（用于评分）
+    } else {
       where.userId = session.user.id;
-    } else if (userIdFilter) {
-      where.userId = userIdFilter;
     }
     if (competitionId) {
       where.competitionId = competitionId;
@@ -94,10 +96,31 @@ export async function POST(request: NextRequest) {
     const formData = await request.formData();
     const file = formData.get('file') as File;
     const competitionId = formData.get('competitionId') as string;
-    const teamName = formData.get('teamName') as string;
-    const teamMembers = formData.get('teamMembers') as string;
+    let teamName = formData.get('teamName') as string;
+    let teamMembers = formData.get('teamMembers') as string;
     const notes = formData.get('notes') as string;
+    const teamId = (formData.get('teamId') as string) || null;
     const extraFilesList = formData.getAll('extraFiles') as File[];
+
+    // 团队赛：校验 teamId 必须是当前用户所在的团队，且属于该赛题
+    if (teamId) {
+      const membership = await (prisma as any).teamMember.findUnique({
+        where: { teamId_userId: { teamId, userId: session.user.id } },
+        include: { team: true },
+      });
+      if (!membership || membership.team.competitionId !== competitionId) {
+        return NextResponse.json({ error: '无效的团队，或你不是该团队成员' }, { status: 400 });
+      }
+      // 自动填充 teamName / teamMembers 文案，方便公示展示
+      if (!teamName) teamName = membership.team.name;
+      if (!teamMembers) {
+        const members = await (prisma as any).teamMember.findMany({
+          where: { teamId },
+          include: { user: { select: { name: true } } },
+        });
+        teamMembers = JSON.stringify(members.map((m: any) => m.user.name));
+      }
+    }
 
     if (!file || !competitionId) {
       return NextResponse.json({ error: '请上传文件并选择赛题' }, { status: 400 });
@@ -166,8 +189,11 @@ export async function POST(request: NextRequest) {
     }
 
     // —— 重交：标记旧的 isLatest 为 false，记录 parentId 链 —— //
+    // 团队赛：按 (teamId, competitionId) 找；个人赛/旧数据：按 (userId, competitionId)
     const previousLatest = await prisma.submission.findFirst({
-      where: { userId: session.user.id, competitionId, isLatest: true },
+      where: teamId
+        ? { teamId, competitionId, isLatest: true } as any
+        : { userId: session.user.id, competitionId, teamId: null, isLatest: true } as any,
       orderBy: { createdAt: 'desc' },
     });
 
@@ -188,6 +214,7 @@ export async function POST(request: NextRequest) {
           notes: notes || null,
           userId: session.user.id,
           competitionId,
+          teamId: teamId || null,
           parentId: previousLatest?.id ?? null,
           isLatest: true,
         } as any,

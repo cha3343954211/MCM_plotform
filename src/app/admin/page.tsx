@@ -976,6 +976,7 @@ export default function AdminPage() {
                   <select value={userForm.role} onChange={(e) => setUserForm({ ...userForm, role: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none">
                     <option value="user">用户</option>
+                    <option value="judge">评委</option>
                     <option value="admin">管理员</option>
                   </select>
                 </div>
@@ -1026,8 +1027,12 @@ export default function AdminPage() {
                       <td className="px-4 py-3 text-gray-500">{user.studentId || '-'}</td>
                       <td className="px-4 py-3 text-gray-500">{user.phone || '-'}</td>
                       <td className="px-4 py-3">
-                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${user.role === 'admin' ? 'bg-primary-100 text-primary-700' : 'bg-gray-100 text-gray-600'}`}>
-                          {user.role === 'admin' ? '管理员' : '用户'}
+                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                          user.role === 'admin' ? 'bg-primary-100 text-primary-700'
+                            : user.role === 'judge' ? 'bg-amber-50 text-amber-700 ring-1 ring-amber-200/50'
+                            : 'bg-gray-100 text-gray-600'
+                        }`}>
+                          {user.role === 'admin' ? '管理员' : user.role === 'judge' ? '评委' : '用户'}
                         </span>
                       </td>
                       <td className="px-4 py-3 text-gray-500">{user._count?.submissions || 0}</td>

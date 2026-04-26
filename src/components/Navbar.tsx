@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useSession, signOut } from 'next-auth/react';
 import { useState, useEffect } from 'react';
 import { usePathname } from 'next/navigation';
-import { Menu, X, BookOpen, User, LogOut, Shield, Trophy } from 'lucide-react';
+import { Menu, X, BookOpen, User, LogOut, Shield, Trophy, Users, Award } from 'lucide-react';
 import { useSiteConfig } from './SiteConfigProvider';
 import NotificationBell from './NotificationBell';
 
@@ -38,7 +38,9 @@ export default function Navbar() {
   const navLinks = [
     { href: '/competitions', label: '赛题列表', show: true },
     { href: '/showcase', label: '论文公示', show: true, icon: Trophy },
+    { href: '/teams', label: '我的团队', show: !!session, icon: Users },
     { href: '/my-submissions', label: '我的提交', show: !!session },
+    { href: '/judge', label: '评委工作台', show: session?.user?.role === 'judge' || session?.user?.role === 'admin', icon: Award },
     { href: '/admin', label: '管理后台', show: session?.user?.role === 'admin', icon: Shield },
   ].filter(n => n.show);
 
@@ -82,6 +84,9 @@ export default function Navbar() {
                   {session.user.role === 'admin' && (
                     <span className="px-1.5 py-0.5 text-[10px] font-semibold rounded-md" style={{ background: `${config.primaryColor}15`, color: config.primaryColor }}>管理员</span>
                   )}
+                  {session.user.role === 'judge' && (
+                    <span className="px-1.5 py-0.5 text-[10px] font-semibold rounded-md bg-amber-50 text-amber-700">评委</span>
+                  )}
                 </Link>
                 <button onClick={() => signOut({ callbackUrl: '/' })}
                   className="flex items-center gap-1 px-3 py-1.5 text-[13px] text-gray-400 hover:text-red-500 rounded-xl hover:bg-red-50/50 transition-all duration-300">
@@ -117,6 +122,9 @@ export default function Navbar() {
                 </div>
                 {session.user.role === 'admin' && (
                   <span className="px-2 py-0.5 text-[10px] font-semibold rounded-md whitespace-nowrap" style={{ background: `${config.primaryColor}15`, color: config.primaryColor }}>管理员</span>
+                )}
+                {session.user.role === 'judge' && (
+                  <span className="px-2 py-0.5 text-[10px] font-semibold rounded-md whitespace-nowrap bg-amber-50 text-amber-700">评委</span>
                 )}
               </div>
             </div>

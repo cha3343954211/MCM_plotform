@@ -18,7 +18,8 @@ export default function CompetitionDetailPage() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ teamName: '', teamMembers: '', notes: '' });
+  const [form, setForm] = useState({ teamName: '', teamMembers: '', notes: '', teamId: '' });
+  const [myTeams, setMyTeams] = useState<any[]>([]);
   const [file, setFile] = useState<File | null>(null);
   const [extraFiles, setExtraFiles] = useState<File[]>([]);
   const [message, setMessage] = useState('');
@@ -30,6 +31,20 @@ export default function CompetitionDetailPage() {
       .then((data) => { setCompetition(data); setLoading(false); })
       .catch(() => setLoading(false));
   }, [id]);
+
+  // 加载当前用户在此赛题下的团队
+  useEffect(() => {
+    if (!session) return;
+    fetch(`/api/teams?competitionId=${id}`, { cache: 'no-store' })
+      .then((r) => r.ok ? r.json() : [])
+      .then((d) => {
+        const teams = Array.isArray(d) ? d.map((m: any) => m.team) : [];
+        setMyTeams(teams);
+        // 如果只有一个团队，默认选中
+        if (teams.length === 1) setForm((f) => ({ ...f, teamId: teams[0].id }));
+      })
+      .catch(() => {});
+  }, [id, session]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -43,6 +58,7 @@ export default function CompetitionDetailPage() {
     formData.append('teamName', form.teamName);
     formData.append('teamMembers', form.teamMembers);
     formData.append('notes', form.notes);
+    if (form.teamId) formData.append('teamId', form.teamId);
     for (const ef of extraFiles) {
       formData.append('extraFiles', ef);
     }
@@ -74,7 +90,7 @@ export default function CompetitionDetailPage() {
         setShowForm(false);
         setFile(null);
         setExtraFiles([]);
-        setForm({ teamName: '', teamMembers: '', notes: '' });
+        setForm({ teamName: '', teamMembers: '', notes: '', teamId: '' });
         const refreshRes = await fetch(`/api/competitions/${id}`);
         const refreshData = await refreshRes.json();
         setCompetition(refreshData);
@@ -180,16 +196,36 @@ export default function CompetitionDetailPage() {
         <div className="glass-card rounded-3xl p-8 md:p-10 mb-6">
           <h2 className="text-lg font-semibold mb-6 tracking-tight">提交论文</h2>
           <form onSubmit={handleSubmit} className="space-y-5">
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wider">参赛团队</label>
+              {myTeams.length > 0 ? (
+                <select value={form.teamId} onChange={(e) => setForm({ ...form, teamId: e.target.value })}
+                  className="w-full px-4 py-3 rounded-2xl apple-input text-sm">
+                  <option value="">— 个人提交（不绑定团队） —</option>
+                  {myTeams.map((t: any) => (
+                    <option key={t.id} value={t.id}>{t.name}（{t.members?.length || 1}/{t.maxMembers} 人）</option>
+                  ))}
+                </select>
+              ) : (
+                <div className="flex flex-wrap items-center gap-2 px-4 py-3 rounded-2xl bg-blue-50 border border-blue-200/60 text-sm text-blue-700">
+                  <span>还未加入任何团队？</span>
+                  <Link href="/teams" className="underline font-medium">前往创建/加入团队</Link>
+                  <span className="text-xs text-blue-500">（可继续作为个人提交）</span>
+                </div>
+              )}
+            </div>
             <div className="grid md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wider">团队名称</label>
+                <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wider">团队名称{form.teamId && <span className="text-blue-500 ml-1 normal-case">（已自动填充）</span>}</label>
                 <input type="text" value={form.teamName} onChange={(e) => setForm({ ...form, teamName: e.target.value })}
-                  className="w-full px-4 py-3 rounded-2xl apple-input text-sm" placeholder="输入团队名称" />
+                  disabled={!!form.teamId}
+                  className="w-full px-4 py-3 rounded-2xl apple-input text-sm disabled:bg-gray-50 disabled:text-gray-400" placeholder={form.teamId ? '将使用已选团队的名称' : '输入团队名称'} />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wider">团队成员</label>
+                <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wider">团队成员{form.teamId && <span className="text-blue-500 ml-1 normal-case">（已自动填充）</span>}</label>
                 <input type="text" value={form.teamMembers} onChange={(e) => setForm({ ...form, teamMembers: e.target.value })}
-                  className="w-full px-4 py-3 rounded-2xl apple-input text-sm" placeholder="成员姓名，用逗号分隔" />
+                  disabled={!!form.teamId}
+                  className="w-full px-4 py-3 rounded-2xl apple-input text-sm disabled:bg-gray-50 disabled:text-gray-400" placeholder={form.teamId ? '将使用已选团队的成员' : '成员姓名，用逗号分隔'} />
               </div>
             </div>
             <div>

@@ -12,7 +12,7 @@ model User {
   name          String
   email         String       @unique
   password      String
-  role          String       @default("user") // "user" | "admin"
+  role          String       @default("user") // "user" | "judge" | "admin"
   school        String?
   studentId     String?
   phone         String?
@@ -23,6 +23,9 @@ model User {
   notifications Notification[]
   comments      ShowcaseComment[]
   likes         ShowcaseLike[]
+  teamMemberships TeamMember[]
+  ledTeams      Team[]       @relation("TeamLeader")
+  judgeScores   JudgeScore[]
 }
 
 model Competition {
@@ -39,6 +42,7 @@ model Competition {
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
   submissions    Submission[]
+  teams          Team[]
 }
 
 model Announcement {
@@ -118,10 +122,13 @@ model Submission {
   updatedAt     DateTime    @updatedAt
   userId        String
   competitionId String
+  teamId        String?     // 团队赛 id；旧数据/个人提交为 null
   user          User        @relation(fields: [userId], references: [id])
   competition   Competition @relation(fields: [competitionId], references: [id])
+  team          Team?       @relation(fields: [teamId], references: [id], onDelete: SetNull)
   comments      ShowcaseComment[]
   likes         ShowcaseLike[]
+  judgeScores   JudgeScore[]
 
   @@index([userId])
   @@index([competitionId])
@@ -168,4 +175,53 @@ model ShowcaseLike {
 
   @@id([userId, submissionId])
   @@index([submissionId])
+}
+
+// =============== 团队赛 ===============
+// 用户在某个赛题下创建的队伍。一个用户每个赛题最多隶属一个队。
+model Team {
+  id            String       @id @default(cuid())
+  name          String
+  inviteCode    String       @unique // 6-8 位易读邀请码
+  competitionId String
+  leaderId      String       // 创建者
+  maxMembers    Int          @default(5) // 队员人数上限（含队长）
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  competition   Competition  @relation(fields: [competitionId], references: [id], onDelete: Cascade)
+  leader        User         @relation("TeamLeader", fields: [leaderId], references: [id])
+  members       TeamMember[]
+  submissions   Submission[]
+
+  @@index([competitionId])
+  @@index([leaderId])
+}
+
+model TeamMember {
+  teamId   String
+  userId   String
+  role     String   @default("member") // "leader" | "member"
+  joinedAt DateTime @default(now())
+  team     Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([teamId, userId])
+  @@index([userId])
+}
+
+// =============== 多评委打分 ===============
+// 每个评委对每个 submission 至多一条记录
+model JudgeScore {
+  id           String     @id @default(cuid())
+  submissionId String
+  judgeId      String
+  score        Float
+  feedback     String?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  submission   Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  judge        User       @relation(fields: [judgeId], references: [id], onDelete: Cascade)
+
+  @@unique([submissionId, judgeId])
+  @@index([judgeId])
 }
