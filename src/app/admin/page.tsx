@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
-import { Shield, Plus, FileText, Users, ChevronDown, ChevronUp, Download, Save, Trash2, Edit3, HardDrive, Upload, X, Paperclip, Megaphone, Pin, Settings, FileDown, Activity, CheckCircle2, XCircle, Key, Sparkles, Send, Bell, Search } from 'lucide-react';
+import { Shield, Plus, FileText, Users, ChevronDown, ChevronUp, Download, Save, Trash2, Edit3, HardDrive, Upload, X, Paperclip, Megaphone, Pin, Settings, FileDown, Activity, CheckCircle2, XCircle, Key, Sparkles, Send, Bell, Search, BarChart3, Layers } from 'lucide-react';
 import MarkdownEditor from '@/components/MarkdownEditor';
 import { formatDate, getStatusLabel, getStatusColor, AWARD_OPTIONS, getAwardLabel, getAwardColor, GRADIENT_PRESETS, buildHeroGradient } from '@/lib/utils';
 
@@ -16,7 +16,7 @@ function formatFileSize(bytes: number) {
 export default function AdminPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
-  const [tab, setTab] = useState<'competitions' | 'submissions' | 'users' | 'files' | 'announcements' | 'loginLogs' | 'cleanup' | 'settings' | 'notifications'>('competitions');
+  const [tab, setTab] = useState<'dashboard' | 'competitions' | 'submissions' | 'users' | 'files' | 'announcements' | 'loginLogs' | 'cleanup' | 'settings' | 'notifications' | 'templates'>('dashboard');
   const [siteConfigForm, setSiteConfigForm] = useState({
     siteName: '', siteDesc: '', heroTitle: '', heroDesc: '', footerText: '', primaryColor: '#2563eb', secondaryColor: '', gradientEnabled: false, gradientAngle: 160, logoUrl: '', bannerText: '', bannerEnabled: false, maxFileSize: 10, maxSubmissionVersions: 5,
   });
@@ -432,7 +432,9 @@ export default function AdminPage() {
   }
 
   const tabs = [
+    { key: 'dashboard' as const, label: '总览', icon: BarChart3, count: 0 },
     { key: 'competitions' as const, label: '赛题管理', icon: FileText, count: competitions.length },
+    { key: 'templates' as const, label: '赛题模板', icon: Layers, count: 0 },
     { key: 'submissions' as const, label: '提交评审', icon: FileText, count: submissions.length },
     { key: 'users' as const, label: '用户管理', icon: Users, count: users.length },
     { key: 'announcements' as const, label: '公告管理', icon: Megaphone, count: announcements.length },
@@ -1498,6 +1500,22 @@ export default function AdminPage() {
         />
       )}
 
+      {/* ===== 总览 ===== */}
+      {tab === 'dashboard' && <DashboardPanel onJump={(t: string) => setTab(t as any)} />}
+
+      {/* ===== 赛题模板 ===== */}
+      {tab === 'templates' && <TemplatesPanel onMessage={setMessage} onApply={(tpl) => {
+        setEditingComp(null);
+        setCompForm((prev: any) => ({
+          ...prev,
+          title: tpl.title,
+          description: tpl.description,
+          content: tpl.content,
+        }));
+        setShowForm(true);
+        setTab('competitions');
+      }} />}
+
       {/* ===== 浮动批量操作栏 ===== */}
       {tab === 'submissions' && selectedSubs.size > 0 && (
         <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 bg-white border border-gray-200 shadow-2xl rounded-2xl px-4 py-3 flex flex-wrap items-center gap-2 max-w-[95vw]">
@@ -2067,6 +2085,250 @@ function SiteSettingsPanel({ form, setForm, loaded, setLoaded, setMessage }: {
           保存设置
         </button>
       </div>
+    </div>
+  );
+}
+
+// ============== 总览仪表盘 ==============
+function DashboardPanel({ onJump }: { onJump: (t: string) => void }) {
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    fetch('/api/admin/stats', { cache: 'no-store' })
+      .then((r) => r.ok ? r.json() : null)
+      .then((d) => { setData(d); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, []);
+
+  if (loading) return <div className="text-center py-12 text-gray-400">加载中…</div>;
+  if (!data) return <div className="text-center py-12 text-gray-400">暂无数据</div>;
+
+  const maxDaily = Math.max(1, ...data.daily.map((d: any) => d.count));
+
+  return (
+    <div className="space-y-6">
+      {/* 顶部 KPI */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <KpiCard color="blue" icon={<Users className="w-5 h-5" />} label="用户总数" value={data.users.total} sub={`今日新增 ${data.users.today}`} onClick={() => onJump('users')} />
+        <KpiCard color="emerald" icon={<FileText className="w-5 h-5" />} label="进行中赛题" value={data.competitions.active} sub={`草稿 ${data.competitions.draft} · 已结束 ${data.competitions.ended}`} onClick={() => onJump('competitions')} />
+        <KpiCard color="amber" icon={<FileDown className="w-5 h-5" />} label="待评分" value={data.submissions.pending} sub={`总提交 ${data.submissions.total}`} highlight={data.submissions.pending > 0} onClick={() => onJump('submissions')} />
+        <KpiCard color="purple" icon={<Activity className="w-5 h-5" />} label="今日提交" value={data.submissions.today} sub="最近 24 小时" />
+      </div>
+
+      {/* 最近 7 天柱状图（CSS 实现） */}
+      <div className="bg-white rounded-2xl border border-gray-200/80 p-5">
+        <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+          <BarChart3 className="w-4 h-4 text-gray-500" /> 最近 7 天提交
+        </h3>
+        <div className="flex items-end justify-between gap-2 h-40">
+          {data.daily.map((d: any) => {
+            const h = (d.count / maxDaily) * 100;
+            return (
+              <div key={d.date} className="flex-1 flex flex-col items-center gap-1 group">
+                <div className="text-[10px] text-gray-400">{d.count > 0 ? d.count : ''}</div>
+                <div
+                  className="w-full bg-gradient-to-t from-blue-500 to-blue-400 rounded-t-md min-h-[2px] group-hover:from-blue-600 group-hover:to-blue-500 transition"
+                  style={{ height: `${Math.max(2, h)}%` }}
+                  title={`${d.date}: ${d.count} 份`}
+                />
+                <div className="text-[10px] text-gray-400">{d.date.slice(5)}</div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* 待评分赛题排行 */}
+      {data.pendingTop.length > 0 && (
+        <div className="bg-white rounded-2xl border border-gray-200/80 p-5">
+          <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+            <FileText className="w-4 h-4 text-amber-500" /> 待评分赛题
+          </h3>
+          <div className="space-y-2">
+            {data.pendingTop.map((p: any) => (
+              <button
+                key={p.competitionId}
+                onClick={() => onJump('submissions')}
+                className="w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl bg-gray-50 hover:bg-amber-50/50 transition text-left"
+              >
+                <span className="font-medium text-gray-800 truncate">{p.title}</span>
+                <span className="text-sm font-semibold text-amber-600 flex-shrink-0">{p.count} 份待评</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function KpiCard({ icon, label, value, sub, color, highlight, onClick }: any) {
+  const colors: any = {
+    blue: 'bg-blue-50 text-blue-600',
+    emerald: 'bg-emerald-50 text-emerald-600',
+    amber: 'bg-amber-50 text-amber-600',
+    purple: 'bg-purple-50 text-purple-600',
+  };
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={!onClick}
+      className={`text-left bg-white rounded-2xl border p-4 transition ${
+        highlight ? 'border-amber-300 ring-2 ring-amber-200/50' : 'border-gray-200/80 hover:border-gray-300'
+      } ${onClick ? 'cursor-pointer hover:-translate-y-0.5 hover:shadow-sm' : 'cursor-default'}`}
+    >
+      <div className="flex items-center gap-2">
+        <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${colors[color] || colors.blue}`}>{icon}</div>
+        <span className="text-xs text-gray-500">{label}</span>
+      </div>
+      <div className="mt-3 text-2xl font-bold text-gray-900">{value}</div>
+      {sub && <div className="text-xs text-gray-400 mt-1">{sub}</div>}
+    </button>
+  );
+}
+
+// ============== 赛题模板管理 ==============
+function TemplatesPanel({ onMessage, onApply }: { onMessage: (m: string) => void; onApply: (tpl: any) => void }) {
+  const [list, setList] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [editing, setEditing] = useState<any | null>(null);
+  const [form, setForm] = useState({ name: '', title: '', description: '', content: '', durationDays: 7 });
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch('/api/competition-templates', { cache: 'no-store' });
+      if (res.ok) setList(await res.json());
+    } finally { setLoading(false); }
+  };
+  useEffect(() => { load(); }, []);
+
+  const startNew = () => {
+    setEditing({ id: null });
+    setForm({ name: '', title: '', description: '', content: '', durationDays: 7 });
+  };
+  const startEdit = (tpl: any) => {
+    setEditing(tpl);
+    setForm({
+      name: tpl.name || '',
+      title: tpl.title || '',
+      description: tpl.description || '',
+      content: tpl.content || '',
+      durationDays: tpl.durationDays || 7,
+    });
+  };
+  const save = async () => {
+    if (!form.name.trim() || !form.title.trim()) {
+      onMessage('模板名和默认标题必填');
+      return;
+    }
+    const url = editing?.id ? `/api/competition-templates/${editing.id}` : '/api/competition-templates';
+    const method = editing?.id ? 'PUT' : 'POST';
+    const res = await fetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(form),
+    });
+    if (res.ok) {
+      onMessage(editing?.id ? '模板已更新' : '模板已创建');
+      setEditing(null);
+      load();
+    } else {
+      const d = await res.json().catch(() => ({}));
+      onMessage(d.error || '保存失败');
+    }
+  };
+  const del = async (id: string) => {
+    if (!confirm('确定删除该模板？')) return;
+    const res = await fetch(`/api/competition-templates/${id}`, { method: 'DELETE' });
+    if (res.ok) { onMessage('已删除'); load(); }
+  };
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-lg font-semibold">赛题模板</h2>
+          <p className="text-gray-400 text-sm mt-0.5">保存常用赛题结构，创建时一键应用以节省重复劳动</p>
+        </div>
+        <button onClick={startNew}
+          className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 text-white text-sm rounded-xl hover:bg-primary-700 transition">
+          <Plus className="w-4 h-4" /> 新建模板
+        </button>
+      </div>
+
+      {editing && (
+        <div className="bg-white rounded-2xl border border-gray-200 p-5 space-y-3">
+          <h3 className="font-medium text-gray-900">{editing.id ? '编辑模板' : '新建模板'}</h3>
+          <div className="grid md:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">模板名（仅 admin 可见）</label>
+              <input type="text" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">默认开放时长（天）</label>
+              <input type="number" min={1} max={365} value={form.durationDays}
+                onChange={(e) => setForm({ ...form, durationDays: Math.max(1, Math.min(365, parseInt(e.target.value) || 7)) })}
+                className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm" />
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">默认赛题标题</label>
+            <input type="text" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">默认简介</label>
+            <textarea rows={2} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">默认正文（Markdown）</label>
+            <MarkdownEditor value={form.content} onChange={(v) => setForm({ ...form, content: v })} rows={10} />
+          </div>
+          <div className="flex gap-2 justify-end">
+            <button onClick={() => setEditing(null)}
+              className="px-4 py-2 text-sm bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 transition">取消</button>
+            <button onClick={save}
+              className="px-4 py-2 text-sm bg-primary-600 text-white rounded-xl hover:bg-primary-700 transition inline-flex items-center gap-1">
+              <Save className="w-4 h-4" /> 保存
+            </button>
+          </div>
+        </div>
+      )}
+
+      {loading ? (
+        <div className="text-center py-12 text-gray-400">加载中…</div>
+      ) : list.length === 0 ? (
+        <div className="text-center py-12 text-gray-400 bg-white rounded-2xl border border-gray-200/80">还没有模板，点击右上角创建一个</div>
+      ) : (
+        <div className="grid md:grid-cols-2 gap-3">
+          {list.map((tpl: any) => (
+            <div key={tpl.id} className="bg-white rounded-2xl border border-gray-200/80 p-4 hover:border-gray-300 transition">
+              <div className="flex items-center justify-between gap-2">
+                <h4 className="font-semibold text-gray-900 truncate">{tpl.name}</h4>
+                <span className="text-[10px] text-gray-400 flex-shrink-0">{tpl.durationDays} 天</span>
+              </div>
+              <p className="text-sm text-gray-700 mt-2 truncate">{tpl.title}</p>
+              {tpl.description && <p className="text-xs text-gray-400 mt-1 line-clamp-2">{tpl.description}</p>}
+              <div className="flex flex-wrap gap-1.5 mt-3">
+                <button onClick={() => onApply(tpl)}
+                  className="px-3 py-1 text-xs bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition">应用到新赛题</button>
+                <button onClick={() => startEdit(tpl)}
+                  className="px-3 py-1 text-xs bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition inline-flex items-center gap-1">
+                  <Edit3 className="w-3 h-3" /> 编辑
+                </button>
+                <button onClick={() => del(tpl.id)}
+                  className="px-3 py-1 text-xs bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition inline-flex items-center gap-1">
+                  <Trash2 className="w-3 h-3" /> 删除
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Trophy, Award, Medal, Star, ExternalLink } from 'lucide-react';
 import { formatDate, getAwardLabel, getAwardColor, isPresetAward } from '@/lib/utils';
 import { useSiteConfig } from '@/components/SiteConfigProvider';
+import ShowcaseInteraction from '@/components/ShowcaseInteraction';
 
 const AWARD_ORDER: Record<string, number> = {
   special: 0, first: 1, second: 2, third: 3, excellent: 4,
@@ -151,6 +152,7 @@ export default function ShowcasePage() {
                     <p className="text-xs text-gray-300 mt-2">{formatDate(sub.createdAt)}</p>
                   </div>
                 </div>
+                <ShowcaseInteraction submissionId={sub.id} />
               </div>
             );
           })}

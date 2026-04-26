@@ -16,10 +16,13 @@ model User {
   school        String?
   studentId     String?
   phone         String?
+  calendarToken String?      @unique // 个人 iCal 订阅 token（首次访问时生成）
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
   submissions   Submission[]
   notifications Notification[]
+  comments      ShowcaseComment[]
+  likes         ShowcaseLike[]
 }
 
 model Competition {
@@ -117,6 +120,8 @@ model Submission {
   competitionId String
   user          User        @relation(fields: [userId], references: [id])
   competition   Competition @relation(fields: [competitionId], references: [id])
+  comments      ShowcaseComment[]
+  likes         ShowcaseLike[]
 
   @@index([userId])
   @@index([competitionId])
@@ -124,4 +129,43 @@ model Submission {
   @@index([showcased, award])
   @@index([createdAt])
   @@index([userId, competitionId, isLatest])
+}
+
+// 赛题模板：admin 可保存常用赛题结构以便后续快速创建
+model CompetitionTemplate {
+  id          String   @id @default(cuid())
+  name        String   // 模板名（仅给 admin 看）
+  title       String   // 默认赛题标题
+  description String   // 默认简介
+  content     String   // 默认 Markdown 详情
+  durationDays Int     @default(7) // 创建赛题时的默认开放时长
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// 公示作品评论
+model ShowcaseComment {
+  id           String     @id @default(cuid())
+  submissionId String
+  userId       String
+  content      String
+  hidden       Boolean    @default(false) // admin 可隐藏不当评论
+  createdAt    DateTime   @default(now())
+  submission   Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([submissionId, hidden, createdAt])
+  @@index([userId])
+}
+
+// 公示作品点赞（一个用户对一个 submission 仅能点一次）
+model ShowcaseLike {
+  userId       String
+  submissionId String
+  createdAt    DateTime   @default(now())
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  submission   Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+
+  @@id([userId, submissionId])
+  @@index([submissionId])
 }

@@ -3,7 +3,8 @@
 import { useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
-import { User, Mail, Building2, CreditCard, Phone, Lock, Save, Shield } from 'lucide-react';
+import { User, Mail, Building2, CreditCard, Phone, Lock, Save, Shield, BarChart3, ChevronRight } from 'lucide-react';
+import Link from 'next/link';
 import { formatDate } from '@/lib/utils';
 
 export default function ProfilePage() {
@@ -111,10 +112,25 @@ export default function ProfilePage() {
   return (
     <div className="max-w-3xl mx-auto px-4 sm:px-6 py-10">
       {/* Header */}
-      <div className="mb-8">
+      <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900 tracking-tight">个人中心</h1>
         <p className="text-gray-400 text-sm mt-1">管理你的账户信息与密码</p>
       </div>
+
+      {/* 入口：我的成绩 */}
+      <Link href="/profile/stats"
+        className="flex items-center justify-between gap-3 mb-6 p-4 rounded-2xl bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200/60 hover:from-blue-100 hover:to-indigo-100 transition group">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-white shadow-sm flex items-center justify-center">
+            <BarChart3 className="w-5 h-5 text-blue-600" />
+          </div>
+          <div>
+            <div className="font-semibold text-gray-900">我的成绩</div>
+            <div className="text-xs text-gray-500">查看参赛记录、得分趋势、获奖墙，启用日历订阅</div>
+          </div>
+        </div>
+        <ChevronRight className="w-5 h-5 text-gray-400 group-hover:text-blue-600 group-hover:translate-x-0.5 transition" />
+      </Link>
 
       {message && (
         <div className={`mb-5 px-4 py-3 rounded-xl text-sm font-medium ${
