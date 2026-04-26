@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { Heart, MessageCircle, Send, EyeOff, Eye, Trash2 } from 'lucide-react';
 import { formatDate } from '@/lib/utils';
+import { useSiteConfig } from './SiteConfigProvider';
 
 interface Comment {
   id: string;
@@ -16,7 +17,9 @@ interface Comment {
 
 export default function ShowcaseInteraction({ submissionId }: { submissionId: string }) {
   const { data: session } = useSession();
+  const { config } = useSiteConfig();
   const isAdmin = session?.user?.role === 'admin';
+  const interactionEnabled = (config as any).commentsEnabled !== false;
 
   const [likeCount, setLikeCount] = useState(0);
   const [liked, setLiked] = useState(false);
@@ -50,6 +53,7 @@ export default function ShowcaseInteraction({ submissionId }: { submissionId: st
   };
 
   const toggleLike = async () => {
+    if (!interactionEnabled) return;
     if (!session) { window.location.href = `/login?callbackUrl=${encodeURIComponent(window.location.pathname)}`; return; }
     if (likeBusy) return;
     setLikeBusy(true);
@@ -64,6 +68,7 @@ export default function ShowcaseInteraction({ submissionId }: { submissionId: st
   };
 
   const post = async () => {
+    if (!interactionEnabled) return;
     if (!session) { window.location.href = `/login?callbackUrl=${encodeURIComponent(window.location.pathname)}`; return; }
     const content = draft.trim();
     if (!content) return;
@@ -103,12 +108,13 @@ export default function ShowcaseInteraction({ submissionId }: { submissionId: st
       <div className="flex items-center gap-2">
         <button
           onClick={toggleLike}
-          disabled={likeBusy}
+          disabled={likeBusy || !interactionEnabled}
+          title={!interactionEnabled ? '互动功能已关闭' : ''}
           className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition ${
             liked
               ? 'bg-rose-50 text-rose-600 ring-1 ring-rose-200'
               : 'bg-gray-50 text-gray-500 hover:bg-gray-100'
-          } disabled:opacity-50`}
+          } disabled:opacity-50 disabled:cursor-not-allowed`}
         >
           <Heart className={`w-3.5 h-3.5 ${liked ? 'fill-current' : ''}`} />
           {likeCount}
@@ -124,7 +130,9 @@ export default function ShowcaseInteraction({ submissionId }: { submissionId: st
 
       {open && (
         <div className="mt-3 space-y-3">
-          {session ? (
+          {!interactionEnabled ? (
+            <p className="text-xs text-gray-400 px-3 py-2 bg-gray-50 rounded-xl">评论功能已关闭</p>
+          ) : session ? (
             <div className="flex gap-2">
               <input
                 type="text"

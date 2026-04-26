@@ -71,6 +71,7 @@ model SiteConfig {
   bannerEnabled Boolean @default(false)
   maxFileSize Int    @default(10)
   maxSubmissionVersions Int @default(5) // 截止前重交保留的最近版本数上限
+  commentsEnabled Boolean @default(true) // 公示作品是否开放评论与点赞
   updatedAt DateTime @updatedAt
 }
 

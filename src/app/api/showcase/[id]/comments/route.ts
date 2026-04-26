@@ -33,6 +33,12 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: '请先登录' }, { status: 401 });
 
+  // 全站评论开关
+  const cfg = await prisma.siteConfig.findUnique({ where: { id: 'default' } });
+  if (cfg && (cfg as any).commentsEnabled === false) {
+    return NextResponse.json({ error: '评论功能已关闭' }, { status: 403 });
+  }
+
   const limit = rateLimit(`comment:${session.user.id}`, 5, 60 * 1000);
   if (!limit.ok) {
     return NextResponse.json(

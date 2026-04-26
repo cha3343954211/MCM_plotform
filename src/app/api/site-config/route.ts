@@ -26,6 +26,7 @@ export async function GET() {
       bannerEnabled: false,
       maxFileSize: 10,
       maxSubmissionVersions: 5,
+      commentsEnabled: true,
     });
   }
 }
@@ -39,7 +40,7 @@ export async function PUT(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { siteName, siteDesc, heroTitle, heroDesc, footerText, primaryColor, secondaryColor, gradientEnabled, gradientAngle, logoUrl, bannerText, bannerEnabled, maxFileSize, maxSubmissionVersions } = body;
+    const { siteName, siteDesc, heroTitle, heroDesc, footerText, primaryColor, secondaryColor, gradientEnabled, gradientAngle, logoUrl, bannerText, bannerEnabled, maxFileSize, maxSubmissionVersions, commentsEnabled } = body;
 
     const update: any = {};
     if (siteName) update.siteName = siteName;
@@ -59,6 +60,7 @@ export async function PUT(request: NextRequest) {
     if (bannerEnabled !== undefined) update.bannerEnabled = bannerEnabled;
     if (maxFileSize !== undefined) update.maxFileSize = maxFileSize;
     if (maxSubmissionVersions !== undefined) update.maxSubmissionVersions = Math.max(1, Math.min(20, Number(maxSubmissionVersions) || 5));
+    if (commentsEnabled !== undefined) update.commentsEnabled = Boolean(commentsEnabled);
 
     const config = await (prisma.siteConfig as any).upsert({
       where: { id: 'default' },
@@ -79,6 +81,7 @@ export async function PUT(request: NextRequest) {
         bannerEnabled: bannerEnabled || false,
         maxFileSize: maxFileSize || 10,
         maxSubmissionVersions: Math.max(1, Math.min(20, Number(maxSubmissionVersions) || 5)),
+        commentsEnabled: commentsEnabled !== undefined ? Boolean(commentsEnabled) : true,
       },
     });
 

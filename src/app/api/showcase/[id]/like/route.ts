@@ -24,6 +24,12 @@ export async function POST(_req: NextRequest, { params }: { params: { id: string
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: '请先登录' }, { status: 401 });
 
+  // 全站互动开关（与评论共用）
+  const cfg = await prisma.siteConfig.findUnique({ where: { id: 'default' } });
+  if (cfg && (cfg as any).commentsEnabled === false) {
+    return NextResponse.json({ error: '互动功能已关闭' }, { status: 403 });
+  }
+
   const sub = await prisma.submission.findUnique({
     where: { id: params.id },
     select: { id: true, showcased: true },

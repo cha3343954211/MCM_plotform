@@ -18,7 +18,7 @@ export default function AdminPage() {
   const router = useRouter();
   const [tab, setTab] = useState<'dashboard' | 'competitions' | 'submissions' | 'users' | 'files' | 'announcements' | 'loginLogs' | 'cleanup' | 'settings' | 'notifications' | 'templates'>('dashboard');
   const [siteConfigForm, setSiteConfigForm] = useState({
-    siteName: '', siteDesc: '', heroTitle: '', heroDesc: '', footerText: '', primaryColor: '#2563eb', secondaryColor: '', gradientEnabled: false, gradientAngle: 160, logoUrl: '', bannerText: '', bannerEnabled: false, maxFileSize: 10, maxSubmissionVersions: 5,
+    siteName: '', siteDesc: '', heroTitle: '', heroDesc: '', footerText: '', primaryColor: '#2563eb', secondaryColor: '', gradientEnabled: false, gradientAngle: 160, logoUrl: '', bannerText: '', bannerEnabled: false, maxFileSize: 10, maxSubmissionVersions: 5, commentsEnabled: true,
   });
   const [configLoaded, setConfigLoaded] = useState(false);
   const [competitions, setCompetitions] = useState<any[]>([]);
@@ -1846,6 +1846,7 @@ function SiteSettingsPanel({ form, setForm, loaded, setLoaded, setMessage }: {
             bannerEnabled: data.bannerEnabled || false,
             maxFileSize: data.maxFileSize || 10,
             maxSubmissionVersions: data.maxSubmissionVersions || 5,
+            commentsEnabled: data.commentsEnabled !== false,
           });
         }
         setLoaded(true);
@@ -2079,6 +2080,18 @@ function SiteSettingsPanel({ form, setForm, loaded, setLoaded, setMessage }: {
             </div>
           </div>
           <p className="text-xs text-gray-400 mt-2">用户截止前可重交，超出上限会自动删除最旧版本（含文件）。建议 3~10 份</p>
+        </div>
+
+        <div className="flex items-center justify-between gap-4 pt-3 border-t border-gray-100">
+          <div>
+            <label className="block text-sm font-medium text-gray-700">公示作品评论与点赞</label>
+            <p className="text-xs text-gray-400 mt-0.5">关闭后公示页不再允许发表评论或点赞（已有记录仍可查看）</p>
+          </div>
+          <button type="button" onClick={() => setForm({ ...form, commentsEnabled: !form.commentsEnabled })}
+            className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors ${form.commentsEnabled ? 'bg-primary-600' : 'bg-gray-300'}`}
+            aria-pressed={form.commentsEnabled}>
+            <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition ${form.commentsEnabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
+          </button>
         </div>
       </div>
 
