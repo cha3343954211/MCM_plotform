@@ -1093,6 +1093,48 @@ export default function AdminPage() {
                     </tbody>
                   </table>
                 </div>
+
+                {team.submissions?.length > 0 && (
+                  <div className="mt-4 pt-4 border-t border-gray-100">
+                    <h4 className="text-sm font-semibold text-gray-700 mb-2">团队提交文件</h4>
+                    <div className="grid gap-2">
+                      {team.submissions.map((sub: any) => (
+                        <div key={sub.id} className="flex flex-wrap items-center justify-between gap-2 p-3 rounded-xl bg-gray-50">
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-gray-900 truncate">{sub.fileName}</p>
+                            <p className="text-xs text-gray-400">
+                              提交者：{sub.user?.name || '-'} · {formatDate(sub.createdAt)}
+                              {sub.score !== null && sub.score !== undefined ? ` · ${sub.score} 分` : ''}
+                            </p>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            <a
+                              href={`/api/download?path=${encodeURIComponent(sub.filePath)}&name=${encodeURIComponent(sub.fileName)}`}
+                              className="inline-flex items-center gap-1 px-3 py-1.5 text-xs bg-white text-gray-700 rounded-lg hover:bg-gray-100 border border-gray-200 transition"
+                            >
+                              <Download className="w-3 h-3" /> 下载主文件
+                            </a>
+                            {sub.extraFiles && (() => {
+                              try {
+                                const extras = JSON.parse(sub.extraFiles);
+                                if (!Array.isArray(extras) || extras.length === 0) return null;
+                                return extras.map((ef: any, idx: number) => (
+                                  <a
+                                    key={idx}
+                                    href={`/api/download?path=${encodeURIComponent(ef.path)}&name=${encodeURIComponent(ef.name)}`}
+                                    className="inline-flex items-center gap-1 px-3 py-1.5 text-xs bg-white text-blue-600 rounded-lg hover:bg-blue-50 border border-blue-100 transition"
+                                  >
+                                    <Paperclip className="w-3 h-3" /> 附件{idx + 1}
+                                  </a>
+                                ));
+                              } catch { return null; }
+                            })()}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             ))}
           </div>

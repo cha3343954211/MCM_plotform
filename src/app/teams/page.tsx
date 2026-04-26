@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Users, Plus, Copy, LogOut, Trash2, Crown, ChevronRight, FileText, Edit3, UserMinus, ArrowRightLeft } from 'lucide-react';
+import { Users, Plus, Copy, LogOut, Trash2, Crown, ChevronRight, FileText, Edit3, UserMinus, ArrowRightLeft, Download, Paperclip } from 'lucide-react';
 import { formatDate } from '@/lib/utils';
 
 export default function TeamsPage() {
@@ -314,6 +314,51 @@ export default function TeamsPage() {
                     </span>
                   ))}
                 </div>
+
+                {team.submissions?.length > 0 && (
+                  <div className="mt-3 p-3 bg-gray-50 rounded-xl border border-gray-100">
+                    <div className="flex items-center justify-between gap-2 mb-2">
+                      <h4 className="text-xs font-semibold text-gray-600">最近提交</h4>
+                      <span className="text-[11px] text-gray-400">共 {team._count?.submissions || team.submissions.length} 份</span>
+                    </div>
+                    <div className="space-y-2">
+                      {team.submissions.map((sub: any) => (
+                        <div key={sub.id} className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="text-xs font-medium text-gray-800 truncate">{sub.fileName}</p>
+                            <p className="text-[11px] text-gray-400">
+                              {formatDate(sub.createdAt)}
+                              {sub.score !== null && sub.score !== undefined ? ` · ${sub.score} 分` : ''}
+                            </p>
+                          </div>
+                          <div className="flex flex-wrap gap-1">
+                            <a
+                              href={`/api/download?path=${encodeURIComponent(sub.filePath)}&name=${encodeURIComponent(sub.fileName)}`}
+                              className="inline-flex items-center gap-1 px-2 py-1 text-[11px] bg-white text-gray-700 rounded-lg hover:bg-gray-100 border border-gray-200"
+                            >
+                              <Download className="w-3 h-3" /> 主文件
+                            </a>
+                            {sub.extraFiles && (() => {
+                              try {
+                                const extras = JSON.parse(sub.extraFiles);
+                                if (!Array.isArray(extras) || extras.length === 0) return null;
+                                return extras.map((ef: any, idx: number) => (
+                                  <a
+                                    key={idx}
+                                    href={`/api/download?path=${encodeURIComponent(ef.path)}&name=${encodeURIComponent(ef.name)}`}
+                                    className="inline-flex items-center gap-1 px-2 py-1 text-[11px] bg-white text-blue-600 rounded-lg hover:bg-blue-50 border border-blue-100"
+                                  >
+                                    <Paperclip className="w-3 h-3" /> 附件{idx + 1}
+                                  </a>
+                                ));
+                              } catch { return null; }
+                            })()}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 <div className="mt-4 flex flex-wrap items-center gap-2 pt-3 border-t border-gray-100">
                   <button onClick={() => copyCode(team.inviteCode)}
