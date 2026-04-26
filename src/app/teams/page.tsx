@@ -15,10 +15,10 @@ export default function TeamsPage() {
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [showJoin, setShowJoin] = useState(false);
-  const [createForm, setCreateForm] = useState({ name: '', competitionId: '', maxMembers: 5 });
+  const [createForm, setCreateForm] = useState({ name: '', competitionId: '' });
   const [joinCode, setJoinCode] = useState('');
   const [editingTeamId, setEditingTeamId] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState({ name: '', maxMembers: 5 });
+  const [editForm, setEditForm] = useState({ name: '' });
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
@@ -58,7 +58,7 @@ export default function TeamsPage() {
       if (res.ok) {
         setMsg({ type: 'ok', text: `团队创建成功，邀请码：${d.inviteCode}` });
         setShowCreate(false);
-        setCreateForm({ name: '', competitionId: '', maxMembers: 5 });
+        setCreateForm({ name: '', competitionId: '' });
         reload();
       } else {
         setMsg({ type: 'err', text: d.error || '创建失败' });
@@ -98,7 +98,7 @@ export default function TeamsPage() {
 
   const startEditTeam = (team: any) => {
     setEditingTeamId(team.id);
-    setEditForm({ name: team.name || '', maxMembers: team.maxMembers || 5 });
+    setEditForm({ name: team.name || '' });
   };
 
   const saveTeam = async (teamId: string) => {
@@ -221,13 +221,11 @@ export default function TeamsPage() {
               ))}
             </select>
           </div>
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">人数上限</label>
-            <input type="number" min={1} max={20}
-              value={createForm.maxMembers}
-              onChange={(e) => setCreateForm({ ...createForm, maxMembers: Math.max(1, Math.min(20, parseInt(e.target.value) || 5)) })}
-              className="w-32 px-3 py-2 border border-gray-200 rounded-xl text-sm" />
-          </div>
+          {createForm.competitionId && (
+            <p className="text-xs text-gray-500 bg-blue-50 text-blue-700 px-3 py-2 rounded-xl">
+              该赛题每队最多 {comps.find((c) => c.id === createForm.competitionId)?.teamMaxMembers || 5} 人，由管理员统一设置。
+            </p>
+          )}
           <div className="flex gap-2 justify-end">
             <button onClick={() => setShowCreate(false)}
               className="px-4 py-2 text-sm bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200">取消</button>
@@ -280,11 +278,6 @@ export default function TeamsPage() {
                       className="w-full px-3 py-2 text-sm bg-white border border-blue-100 rounded-lg outline-none"
                       placeholder="团队名称" maxLength={50} />
                     <div className="flex flex-wrap items-center gap-2">
-                      <label className="text-xs text-blue-700">人数上限</label>
-                      <input type="number" min={team.members?.length || 1} max={20}
-                        value={editForm.maxMembers}
-                        onChange={(e) => setEditForm({ ...editForm, maxMembers: Math.max(team.members?.length || 1, Math.min(20, parseInt(e.target.value) || 5)) })}
-                        className="w-24 px-2 py-1.5 text-sm bg-white border border-blue-100 rounded-lg outline-none" />
                       <button onClick={() => saveTeam(team.id)} disabled={busy}
                         className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded-lg disabled:opacity-50">保存</button>
                       <button onClick={() => setEditingTeamId(null)}

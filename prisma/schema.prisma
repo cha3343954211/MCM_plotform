@@ -36,6 +36,7 @@ model Competition {
   attachmentName String?      // 附件原始文件名
   attachmentPath String?      // 附件存储路径
   attachments    String?      // JSON array of {name, path} for multiple attachments
+  teamMaxMembers Int          @default(5)
   startTime      DateTime
   endTime        DateTime
   status         String       @default("draft") // "draft" | "active" | "ended"

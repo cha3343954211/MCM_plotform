@@ -14,6 +14,13 @@ function formatFileSize(bytes: number) {
   return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
 }
 
+function toDatetimeLocal(value: string | Date) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
 export default function AdminPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
@@ -34,7 +41,7 @@ export default function AdminPage() {
   const [showForm, setShowForm] = useState(false);
   const [editingComp, setEditingComp] = useState<any>(null);
   const [compForm, setCompForm] = useState({
-    title: '', description: '', content: '', startTime: '', endTime: '', status: 'draft',
+    title: '', description: '', content: '', startTime: '', endTime: '', status: 'draft', teamMaxMembers: 5,
   });
   const [compAttachment, setCompAttachment] = useState<File | null>(null);
   const [compExtraAttachments, setCompExtraAttachments] = useState<File[]>([]);
@@ -48,8 +55,6 @@ export default function AdminPage() {
   const [teamSearch, setTeamSearch] = useState('');
   const [teamCompetitionFilter, setTeamCompetitionFilter] = useState('all');
   const [collapsedTeamComps, setCollapsedTeamComps] = useState<Set<string>>(new Set());
-  const [editingTeamLimitId, setEditingTeamLimitId] = useState<string | null>(null);
-  const [teamLimitValue, setTeamLimitValue] = useState('');
   const [expandedComps, setExpandedComps] = useState<Set<string>>(new Set());
   // 批量操作
   const [selectedSubs, setSelectedSubs] = useState<Set<string>>(new Set());
@@ -165,6 +170,7 @@ export default function AdminPage() {
     formData.append('startTime', compForm.startTime);
     formData.append('endTime', compForm.endTime);
     formData.append('status', compForm.status);
+    formData.append('teamMaxMembers', String(compForm.teamMaxMembers));
     if (compAttachment) {
       formData.append('attachment', compAttachment);
     }
@@ -189,7 +195,7 @@ export default function AdminPage() {
         setMessage(editingComp ? '更新成功' : '创建成功');
         setShowForm(false);
         setEditingComp(null);
-        setCompForm({ title: '', description: '', content: '', startTime: '', endTime: '', status: 'draft' });
+        setCompForm({ title: '', description: '', content: '', startTime: '', endTime: '', status: 'draft', teamMaxMembers: 5 });
         setCompAttachment(null);
         setCompExtraAttachments([]);
         setRemoveAttachment(false);
@@ -243,32 +249,6 @@ export default function AdminPage() {
     }
   };
 
-  const handleUpdateTeamLimit = async (team: any) => {
-    const maxMembers = Number(teamLimitValue);
-    if (!Number.isFinite(maxMembers) || maxMembers < (team.members?.length || 1) || maxMembers > 20) {
-      setMessage(`人数上限必须在 ${team.members?.length || 1}-20 之间`);
-      return;
-    }
-    try {
-      const res = await fetch(`/api/teams/${team.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ maxMembers }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (res.ok) {
-        setMessage('团队人数上限已更新');
-        setEditingTeamLimitId(null);
-        setTeamLimitValue('');
-        await loadTeams();
-      } else {
-        setMessage(data.error || '更新人数上限失败');
-      }
-    } catch {
-      setMessage('更新人数上限失败');
-    }
-  };
-
   const handleClearOldLogs = async (days: number) => {
     if (!confirm(`确定清理 ${days} 天前的登录日志？`)) return;
     try {
@@ -308,10 +288,11 @@ export default function AdminPage() {
     setCompForm({
       title: comp.title,
       description: comp.description,
-      content: comp.content,
-      startTime: new Date(comp.startTime).toISOString().slice(0, 16),
-      endTime: new Date(comp.endTime).toISOString().slice(0, 16),
+      content: comp.content || '',
+      startTime: toDatetimeLocal(comp.startTime),
+      endTime: toDatetimeLocal(comp.endTime),
       status: comp.status,
+      teamMaxMembers: comp.teamMaxMembers || 5,
     });
     setCompAttachment(null);
     setRemoveAttachment(false);
@@ -580,7 +561,7 @@ export default function AdminPage() {
               onClick={() => {
                 setShowForm(!showForm);
                 setEditingComp(null);
-                setCompForm({ title: '', description: '', content: '', startTime: '', endTime: '', status: 'draft' });
+                setCompForm({ title: '', description: '', content: '', startTime: '', endTime: '', status: 'draft', teamMaxMembers: 5 });
                 setCompAttachment(null);
                 setRemoveAttachment(false);
               }}
@@ -728,6 +709,18 @@ export default function AdminPage() {
                     />
                   </div>
                 </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">每队人数上限</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={20}
+                    value={compForm.teamMaxMembers}
+                    onChange={(e) => setCompForm({ ...compForm, teamMaxMembers: Math.max(1, Math.min(20, parseInt(e.target.value) || 5)) })}
+                    className="w-40 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none"
+                  />
+                  <p className="text-xs text-gray-400 mt-1">用户创建该赛题团队时，将统一使用此人数上限。</p>
+                </div>
                 <button type="submit" className="px-6 py-2 bg-primary-600 text-white font-medium rounded-lg hover:bg-primary-700 transition">
                   {editingComp ? '保存修改' : '发布赛题'}
                 </button>
@@ -748,7 +741,7 @@ export default function AdminPage() {
                     </div>
                     <p className="text-sm text-gray-500 mt-1">{comp.description}</p>
                     <p className="text-xs text-gray-400 mt-1">
-                      {formatDate(comp.startTime)} ~ {formatDate(comp.endTime)} | {comp._count?.submissions || 0} 份提交
+                      {formatDate(comp.startTime)} ~ {formatDate(comp.endTime)} | 每队最多 {comp.teamMaxMembers || 5} 人 | {comp._count?.submissions || 0} 份提交
                     </p>
                     {comp.attachmentName && (
                       <a href={comp.attachmentPath} download className="inline-flex items-center gap-1 text-xs text-blue-600 mt-1 hover:underline">
@@ -1115,37 +1108,6 @@ export default function AdminPage() {
                     <span className="px-2.5 py-1 rounded-lg text-xs bg-gray-50 text-gray-600">
                       {team._count?.members || team.members?.length || 0}/{team.maxMembers} 人
                     </span>
-                    {editingTeamLimitId === team.id ? (
-                      <div className="flex items-center gap-1">
-                        <input
-                          type="number"
-                          min={team.members?.length || 1}
-                          max={20}
-                          value={teamLimitValue}
-                          onChange={(e) => setTeamLimitValue(e.target.value)}
-                          className="w-20 px-2 py-1 text-xs bg-white border border-gray-200 rounded-lg outline-none"
-                        />
-                        <button
-                          onClick={() => handleUpdateTeamLimit(team)}
-                          className="px-2 py-1 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-500"
-                        >
-                          保存
-                        </button>
-                        <button
-                          onClick={() => { setEditingTeamLimitId(null); setTeamLimitValue(''); }}
-                          className="px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200"
-                        >
-                          取消
-                        </button>
-                      </div>
-                    ) : (
-                      <button
-                        onClick={() => { setEditingTeamLimitId(team.id); setTeamLimitValue(String(team.maxMembers || 5)); }}
-                        className="px-3 py-1.5 text-xs bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition"
-                      >
-                        调整人数上限
-                      </button>
-                    )}
                     <span className="px-2.5 py-1 rounded-lg text-xs bg-green-50 text-green-600">
                       提交 {team._count?.submissions || 0}
                     </span>
