@@ -20,9 +20,11 @@ if (!globalForPrisma.prismaTuned) {
   Promise.resolve()
     .then(async () => {
       try {
-        await prisma.$executeRawUnsafe('PRAGMA journal_mode = WAL');
-        await prisma.$executeRawUnsafe('PRAGMA synchronous = NORMAL');
-        await prisma.$executeRawUnsafe('PRAGMA busy_timeout = 5000');
+        // PRAGMA journal_mode 会返回当前模式，必须用 $queryRawUnsafe；
+        // synchronous / busy_timeout 不返回结果，但统一用 queryRaw 也兼容。
+        await prisma.$queryRawUnsafe('PRAGMA journal_mode = WAL');
+        await prisma.$queryRawUnsafe('PRAGMA synchronous = NORMAL');
+        await prisma.$queryRawUnsafe('PRAGMA busy_timeout = 5000');
       } catch (e) {
         console.warn('[prisma] PRAGMA tuning skipped:', e);
       }
