@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { Shield, Plus, FileText, Users, ChevronDown, ChevronUp, Download, Save, Trash2, Edit3, HardDrive, Upload, X, Paperclip, Megaphone, Pin, Settings, FileDown, Activity, CheckCircle2, XCircle, Key, Sparkles, Send, Bell, Search, BarChart3, Layers } from 'lucide-react';
 import MarkdownEditor from '@/components/MarkdownEditor';
 import { formatDate, getStatusLabel, getStatusColor, AWARD_OPTIONS, getAwardLabel, getAwardColor, GRADIENT_PRESETS, buildHeroGradient } from '@/lib/utils';
-import { isAdminRole, isSuperAdminRole, roleLabel } from '@/lib/roles';
+import { canReview, isAdminRole, isSuperAdminRole, roleLabel } from '@/lib/roles';
 
 function formatFileSize(bytes: number) {
   if (bytes < 1024) return bytes + ' B';
@@ -17,14 +17,16 @@ function formatFileSize(bytes: number) {
 export default function AdminPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
+  const canReviewSubmissions = canReview(session?.user?.role);
   const canAward = isSuperAdminRole(session?.user?.role);
-  const [tab, setTab] = useState<'dashboard' | 'competitions' | 'submissions' | 'users' | 'files' | 'announcements' | 'loginLogs' | 'cleanup' | 'settings' | 'notifications' | 'templates'>('dashboard');
+  const [tab, setTab] = useState<'dashboard' | 'competitions' | 'templates' | 'submissions' | 'teams' | 'users' | 'files' | 'announcements' | 'loginLogs' | 'cleanup' | 'settings' | 'notifications'>('dashboard');
   const [siteConfigForm, setSiteConfigForm] = useState({
     siteName: '', siteDesc: '', heroTitle: '', heroDesc: '', footerText: '', primaryColor: '#2563eb', secondaryColor: '', gradientEnabled: false, gradientAngle: 160, logoUrl: '', bannerText: '', bannerEnabled: false, maxFileSize: 10, maxSubmissionVersions: 5, commentsEnabled: true,
   });
   const [configLoaded, setConfigLoaded] = useState(false);
   const [competitions, setCompetitions] = useState<any[]>([]);
   const [submissions, setSubmissions] = useState<any[]>([]);
+  const [teams, setTeams] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
   const [files, setFiles] = useState<any>({ files: [], totalSize: 0, totalCount: 0 });
   const [loading, setLoading] = useState(true);
@@ -84,6 +86,12 @@ export default function AdminPage() {
     setUsers(Array.isArray(data) ? data : []);
   }, []);
 
+  const loadTeams = useCallback(async () => {
+    const res = await fetch('/api/teams?admin=1', { cache: 'no-store' });
+    const data = await res.json();
+    setTeams(Array.isArray(data) ? data : []);
+  }, []);
+
   const loadFiles = useCallback(async () => {
     const res = await fetch('/api/admin/files', { cache: 'no-store' });
     setFiles(await res.json());
@@ -110,13 +118,14 @@ export default function AdminPage() {
       await Promise.all([
         loadCompetitions(),
         loadSubmissions(),
+        loadTeams(),
         loadUsers(),
       ]);
     } catch (e) {
       console.error(e);
     }
     if (showSpinner) setLoading(false);
-  }, [loadCompetitions, loadSubmissions, loadUsers]);
+  }, [loadCompetitions, loadSubmissions, loadTeams, loadUsers]);
 
   useEffect(() => {
     if (status !== 'authenticated' || !isAdminRole(session?.user?.role)) return;
@@ -210,6 +219,22 @@ export default function AdminPage() {
       }
     } catch {
       setMessage('删除失败');
+    }
+  };
+
+  const handleDeleteTeam = async (id: string) => {
+    if (!confirm('确定解散此团队？团队下的提交不会删除，但会解除团队关联。')) return;
+    try {
+      const res = await fetch(`/api/teams/${id}?action=disband`, { method: 'DELETE' });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        setMessage('团队已解散');
+        await Promise.all([loadTeams(), loadSubmissions()]);
+      } else {
+        setMessage(data.error || '解散团队失败');
+      }
+    } catch {
+      setMessage('解散团队失败');
     }
   };
 
@@ -438,6 +463,7 @@ export default function AdminPage() {
     { key: 'competitions' as const, label: '赛题管理', icon: FileText, count: competitions.length },
     { key: 'templates' as const, label: '赛题模板', icon: Layers, count: 0 },
     { key: 'submissions' as const, label: '提交评审', icon: FileText, count: submissions.length },
+    { key: 'teams' as const, label: '团队管理', icon: Users, count: teams.length },
     { key: 'users' as const, label: '用户管理', icon: Users, count: users.length },
     { key: 'announcements' as const, label: '公告管理', icon: Megaphone, count: announcements.length },
     { key: 'files' as const, label: '文件存储', icon: HardDrive, count: files.totalCount || 0 },
@@ -828,7 +854,7 @@ export default function AdminPage() {
                         >
                           <Download className="w-3 h-3" /> 下载
                         </a>
-                        {canAward && (
+                        {canReviewSubmissions && (
                           <button
                             onClick={() => {
                               setGradingId(gradingId === sub.id ? null : sub.id);
@@ -884,46 +910,48 @@ export default function AdminPage() {
                           />
                         </div>
                       </div>
-                      <div className="grid md:grid-cols-2 gap-3 mb-3">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">奖项等级</label>
-                          <div className="flex gap-2">
-                            <select
-                              value={AWARD_OPTIONS.some(o => o.value === gradeForm.award) ? gradeForm.award : '__custom__'}
-                              onChange={(e) => {
-                                if (e.target.value === '__custom__') {
-                                  setGradeForm({ ...gradeForm, award: '' });
-                                } else {
-                                  setGradeForm({ ...gradeForm, award: e.target.value });
-                                }
-                              }}
-                              className="w-1/2 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none bg-white"
-                            >
-                              {AWARD_OPTIONS.map((opt) => (
-                                <option key={opt.value} value={opt.value}>{opt.label}</option>
-                              ))}
-                              <option value="__custom__">自定义奖项...</option>
-                            </select>
-                            {(!AWARD_OPTIONS.some(o => o.value === gradeForm.award) || gradeForm.award === '') && (
-                              <input
-                                type="text"
-                                value={AWARD_OPTIONS.some(o => o.value === gradeForm.award) ? '' : gradeForm.award}
-                                onChange={(e) => setGradeForm({ ...gradeForm, award: e.target.value })}
-                                className="w-1/2 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
-                                placeholder="输入自定义奖项名称"
-                              />
-                            )}
+                      {canAward && (
+                        <div className="grid md:grid-cols-2 gap-3 mb-3">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">奖项等级</label>
+                            <div className="flex gap-2">
+                              <select
+                                value={AWARD_OPTIONS.some(o => o.value === gradeForm.award) ? gradeForm.award : '__custom__'}
+                                onChange={(e) => {
+                                  if (e.target.value === '__custom__') {
+                                    setGradeForm({ ...gradeForm, award: '' });
+                                  } else {
+                                    setGradeForm({ ...gradeForm, award: e.target.value });
+                                  }
+                                }}
+                                className="w-1/2 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none bg-white"
+                              >
+                                {AWARD_OPTIONS.map((opt) => (
+                                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                ))}
+                                <option value="__custom__">自定义奖项...</option>
+                              </select>
+                              {(!AWARD_OPTIONS.some(o => o.value === gradeForm.award) || gradeForm.award === '') && (
+                                <input
+                                  type="text"
+                                  value={AWARD_OPTIONS.some(o => o.value === gradeForm.award) ? '' : gradeForm.award}
+                                  onChange={(e) => setGradeForm({ ...gradeForm, award: e.target.value })}
+                                  className="w-1/2 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
+                                  placeholder="输入自定义奖项名称"
+                                />
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex items-end">
+                            <label className="flex items-center gap-2 cursor-pointer">
+                              <input type="checkbox" checked={gradeForm.showcased}
+                                onChange={(e) => setGradeForm({ ...gradeForm, showcased: e.target.checked })}
+                                className="w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
+                              <span className="text-sm text-gray-700">在论文公示板展示</span>
+                            </label>
                           </div>
                         </div>
-                        <div className="flex items-end">
-                          <label className="flex items-center gap-2 cursor-pointer">
-                            <input type="checkbox" checked={gradeForm.showcased}
-                              onChange={(e) => setGradeForm({ ...gradeForm, showcased: e.target.checked })}
-                              className="w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
-                            <span className="text-sm text-gray-700">在论文公示板展示</span>
-                          </label>
-                        </div>
-                      </div>
+                      )}
                       <button
                         onClick={() => handleGrade(sub.id)}
                         className="px-4 py-2 bg-primary-600 text-white text-sm font-medium rounded-lg hover:bg-primary-700 transition"
@@ -941,6 +969,90 @@ export default function AdminPage() {
                 })}
               </div>
           )}
+        </div>
+      )}
+
+      {/* ===== 团队管理 ===== */}
+      {tab === 'teams' && (
+        <div>
+          <div className="flex flex-wrap justify-between items-center gap-3 mb-6">
+            <div>
+              <h2 className="text-lg font-semibold">团队管理</h2>
+              <p className="text-sm text-gray-400 mt-1">查看各赛题团队、队长、成员与提交情况</p>
+            </div>
+            <button
+              onClick={() => loadTeams()}
+              className="px-4 py-2 bg-gray-900 text-white text-sm font-medium rounded-lg hover:bg-gray-800 transition"
+            >
+              刷新
+            </button>
+          </div>
+
+          <div className="grid gap-4">
+            {teams.length === 0 ? (
+              <div className="bg-white rounded-xl border border-gray-200 p-10 text-center text-gray-400">
+                暂无团队
+              </div>
+            ) : teams.map((team: any) => (
+              <div key={team.id} className="bg-white rounded-xl border border-gray-200 p-5">
+                <div className="flex flex-wrap items-start justify-between gap-4 mb-4">
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="font-semibold text-gray-900">{team.name}</h3>
+                      <span className="px-2 py-0.5 rounded-lg text-xs bg-blue-50 text-blue-600 ring-1 ring-blue-100">
+                        邀请码：{team.inviteCode}
+                      </span>
+                    </div>
+                    <p className="text-sm text-gray-500 mt-1">赛题：{team.competition?.title || '-'}</p>
+                    <p className="text-xs text-gray-400 mt-1">创建时间：{formatDate(team.createdAt)}</p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="px-2.5 py-1 rounded-lg text-xs bg-gray-50 text-gray-600">
+                      {team._count?.members || team.members?.length || 0}/{team.maxMembers} 人
+                    </span>
+                    <span className="px-2.5 py-1 rounded-lg text-xs bg-green-50 text-green-600">
+                      提交 {team._count?.submissions || 0}
+                    </span>
+                    <button
+                      onClick={() => handleDeleteTeam(team.id)}
+                      className="px-3 py-1.5 text-xs bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition"
+                    >
+                      解散团队
+                    </button>
+                  </div>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-50 border-y border-gray-100">
+                      <tr>
+                        <th className="text-left px-3 py-2 font-medium text-gray-500">成员</th>
+                        <th className="text-left px-3 py-2 font-medium text-gray-500">邮箱</th>
+                        <th className="text-left px-3 py-2 font-medium text-gray-500">学校</th>
+                        <th className="text-left px-3 py-2 font-medium text-gray-500">身份</th>
+                        <th className="text-left px-3 py-2 font-medium text-gray-500">加入时间</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {team.members?.map((m: any) => (
+                        <tr key={m.userId}>
+                          <td className="px-3 py-2 font-medium text-gray-800">{m.user?.name || '-'}</td>
+                          <td className="px-3 py-2 text-gray-500">{m.user?.email || '-'}</td>
+                          <td className="px-3 py-2 text-gray-500">{m.user?.school || '-'}</td>
+                          <td className="px-3 py-2">
+                            <span className={`px-2 py-0.5 rounded-full text-xs ${m.role === 'leader' ? 'bg-amber-50 text-amber-600' : 'bg-gray-50 text-gray-500'}`}>
+                              {m.role === 'leader' ? '队长' : '成员'}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2 text-xs text-gray-400">{formatDate(m.joinedAt)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

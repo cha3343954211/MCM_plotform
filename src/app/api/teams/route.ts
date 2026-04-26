@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { generateInviteCode } from '@/lib/inviteCode';
+import { isAdminRole } from '@/lib/roles';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,6 +14,25 @@ export async function GET(request: NextRequest) {
 
   const { searchParams } = new URL(request.url);
   const competitionId = searchParams.get('competitionId') || undefined;
+  const admin = searchParams.get('admin') === '1';
+
+  if (admin && isAdminRole(session.user.role)) {
+    const teams = await (prisma as any).team.findMany({
+      where: competitionId ? { competitionId } : {},
+      include: {
+        competition: { select: { id: true, title: true, status: true, endTime: true } },
+        leader: { select: { id: true, name: true, email: true, school: true } },
+        members: {
+          include: { user: { select: { id: true, name: true, email: true, school: true, studentId: true } } },
+          orderBy: { joinedAt: 'asc' },
+        },
+        _count: { select: { submissions: true, members: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 500,
+    });
+    return NextResponse.json(teams);
+  }
 
   const memberships = await (prisma as any).teamMember.findMany({
     where: {

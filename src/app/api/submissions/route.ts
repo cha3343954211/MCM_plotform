@@ -51,6 +51,7 @@ export async function GET(request: NextRequest) {
     const competitionId = searchParams.get('competitionId');
     const includeVersions = searchParams.get('versions') === '1';
     const userIdFilter = searchParams.get('userId') || undefined;
+    const anonymous = searchParams.get('anonymous') === '1';
 
     const where: any = {};
     if (isAdminRole(session.user.role)) {
@@ -78,7 +79,7 @@ export async function GET(request: NextRequest) {
       take: isAdminRole(session.user.role) ? 500 : 200,
     });
 
-    if (session.user.role === 'judge') {
+    if (session.user.role === 'judge' || (anonymous && canReview(session.user.role))) {
       return NextResponse.json(submissions.map((s: any, index: number) => ({
         ...s,
         anonymousCode: `A-${String(index + 1).padStart(4, '0')}`,

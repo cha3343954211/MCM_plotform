@@ -4,7 +4,7 @@ import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { unlink } from 'fs/promises';
 import path from 'path';
-import { canAward, isAdminRole } from '@/lib/roles';
+import { canAward, canReview, isAdminRole } from '@/lib/roles';
 
 async function tryUnlink(relPath: string | null | undefined) {
   if (!relPath) return;
@@ -17,7 +17,7 @@ export async function PUT(
 ) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session || !canAward(session.user.role)) {
+    if (!session || !canReview(session.user.role)) {
       return NextResponse.json({ error: '无权限' }, { status: 403 });
     }
 
@@ -31,8 +31,10 @@ export async function PUT(
     }
     if (feedback !== undefined) data.feedback = feedback;
     if (status) data.status = status;
-    if (award !== undefined) data.award = award || null;
-    if (showcased !== undefined) data.showcased = Boolean(showcased);
+    if (canAward(session.user.role)) {
+      if (award !== undefined) data.award = award || null;
+      if (showcased !== undefined) data.showcased = Boolean(showcased);
+    }
 
     const before = await prisma.submission.findUnique({
       where: { id: params.id },

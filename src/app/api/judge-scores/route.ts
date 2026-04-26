@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
 
   const where: any = { submissionId };
   if (!isSuperAdminRole(session.user.role)) {
-    if (session.user.role !== 'judge') return NextResponse.json({ error: '无权限' }, { status: 403 });
+    if (!canReview(session.user.role)) return NextResponse.json({ error: '无权限' }, { status: 403 });
     where.judgeId = session.user.id;
   }
 
@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: '请先登录' }, { status: 401 });
   if (!canReview(session.user.role)) {
-    return NextResponse.json({ error: '只有评委或高级管理员可打分' }, { status: 403 });
+    return NextResponse.json({ error: '只有评委、管理员或高级管理员可打分' }, { status: 403 });
   }
 
   let body: any;

@@ -29,7 +29,7 @@ export default function JudgePage() {
       router.push('/');
       return;
     }
-    fetch('/api/submissions', { cache: 'no-store' })
+    fetch('/api/submissions?anonymous=1', { cache: 'no-store' })
       .then((r) => r.ok ? r.json() : [])
       .then(async (data) => {
         const subs = Array.isArray(data) ? data : [];

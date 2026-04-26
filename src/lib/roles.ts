@@ -14,7 +14,7 @@ export function isSuperAdminRole(role?: string | null) {
 }
 
 export function canReview(role?: string | null) {
-  return role === ROLES.JUDGE || role === ROLES.SUPER_ADMIN;
+  return role === ROLES.JUDGE || role === ROLES.ADMIN || role === ROLES.SUPER_ADMIN;
 }
 
 export function canAward(role?: string | null) {
