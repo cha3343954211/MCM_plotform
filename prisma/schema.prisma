@@ -114,4 +114,10 @@ model Submission {
   competitionId String
   user          User        @relation(fields: [userId], references: [id])
   competition   Competition @relation(fields: [competitionId], references: [id])
+
+  @@index([userId])
+  @@index([competitionId])
+  @@index([status])
+  @@index([showcased, award])
+  @@index([createdAt])
 }

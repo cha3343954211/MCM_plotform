@@ -24,14 +24,16 @@ export default function NotificationsPage() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
 
-  const load = async () => {
+  const load = async (signal?: AbortSignal) => {
     try {
-      const res = await fetch(`/api/notifications?limit=100${filter === 'unread' ? '&unread=1' : ''}`);
+      const res = await fetch(`/api/notifications?limit=100${filter === 'unread' ? '&unread=1' : ''}`, { signal });
       if (!res.ok) return;
       const data = await res.json();
-      setItems(data.items || []);
-    } catch {}
-    setLoading(false);
+      if (!signal?.aborted) setItems(data.items || []);
+    } catch (e: any) {
+      if (e?.name === 'AbortError') return;
+    }
+    if (!signal?.aborted) setLoading(false);
   };
 
   useEffect(() => {
@@ -39,7 +41,10 @@ export default function NotificationsPage() {
       router.push('/login?callbackUrl=/notifications');
       return;
     }
-    if (status === 'authenticated') load();
+    if (status !== 'authenticated') return;
+    const controller = new AbortController();
+    load(controller.signal);
+    return () => controller.abort();
   }, [status, filter]);
 
   const markAllRead = async () => {

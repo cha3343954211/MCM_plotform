@@ -42,6 +42,7 @@ export async function GET(request: NextRequest) {
         competition: { select: { id: true, title: true } },
       },
       orderBy: { createdAt: 'desc' },
+      take: session.user.role === 'admin' ? 500 : 200,
     });
 
     return NextResponse.json(submissions);
