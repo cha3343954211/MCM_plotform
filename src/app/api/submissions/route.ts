@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { writeFile, mkdir } from 'fs/promises';
 import path from 'path';
+import { validateUpload } from '@/lib/fileType';
 
 async function getMaxFileSize(): Promise<number> {
   try {
@@ -106,6 +107,11 @@ export async function POST(request: NextRequest) {
     const filePath = path.join(uploadDir, fileName);
 
     const bytes = await file.arrayBuffer();
+    const mainView = new Uint8Array(bytes);
+    const mainTypeError = validateUpload(file.name, mainView);
+    if (mainTypeError) {
+      return NextResponse.json({ error: mainTypeError }, { status: 400 });
+    }
     await writeFile(filePath, Buffer.from(bytes));
 
     // Handle extra files
@@ -120,6 +126,11 @@ export async function POST(request: NextRequest) {
         const efName = `${session.user.id}_${competitionId}_${Date.now()}_${i}_${Math.random().toString(36).slice(2, 8)}${efExt}`;
         const efPath = path.join(uploadDir, efName);
         const efBytes = await ef.arrayBuffer();
+        const efView = new Uint8Array(efBytes);
+        const efTypeError = validateUpload(ef.name, efView);
+        if (efTypeError) {
+          return NextResponse.json({ error: efTypeError }, { status: 400 });
+        }
         await writeFile(efPath, Buffer.from(efBytes));
         extraFilesData.push({ name: ef.name, path: `/uploads/${efName}` });
       }

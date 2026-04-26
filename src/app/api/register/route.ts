@@ -1,9 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import prisma from '@/lib/prisma';
+import { getClientIp, rateLimit } from '@/lib/rateLimit';
 
 export async function POST(request: NextRequest) {
   try {
+    const ip = getClientIp(request);
+    const rl = rateLimit(`register:${ip}`, 5, 10 * 60_000);
+    if (!rl.ok) {
+      return NextResponse.json(
+        { error: '注册过于频繁，请稍后再试' },
+        { status: 429, headers: { 'Retry-After': String(rl.retryAfterSec) } }
+      );
+    }
+
     const body = await request.json();
     const { name, email, password, school, studentId, phone } = body;
 
