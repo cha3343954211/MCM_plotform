@@ -1,250 +1,581 @@
-# 数学建模竞赛平台 - 项目工作日志
+# 数学建模竞赛平台 - 项目工作日志 / 交接文档
 
 ## 项目概述
 
-- **项目名称**: MathoiMCM (数学建模竞赛平台)
-- **技术栈**: Next.js 14 + TypeScript + Prisma (SQLite) + NextAuth + TailwindCSS
-- **开发时间**: 2026年4月23日
+- **项目名称**: MathoiMCM
+- **项目类型**: 数学建模竞赛在线平台
+- **当前用途**: 赛题发布、论文提交、后台管理、评审打分、团队赛、作品公示、通知管理
+- **技术栈**: Next.js 14 + TypeScript + Prisma + SQLite + NextAuth + Tailwind CSS
+- **目标运行环境**: Windows Server 2025 / Linux VPS
+- **当前代码状态**:
+  - `npx tsc --noEmit` 通过
+  - `npm run build` 通过
+  - 本地 `npm run dev` 可正常启动
 
 ---
 
-## 一、项目初始化
+## 一、技术架构与运行方式
 
-### 1.1 创建项目结构
+### 1.1 前端
 
-- 初始化 `package.json`，配置 Next.js、React、Prisma、NextAuth、TailwindCSS、bcryptjs、lucide-react 等依赖
-- 配置 `tsconfig.json`、`next.config.mjs`、`tailwind.config.ts`、`postcss.config.mjs`
-- 创建 `.gitignore`、`.env.example` 环境变量模板
+- 使用 Next.js App Router
+- 主要页面位于 `src/app`
+- UI 基于 Tailwind CSS + `lucide-react`
+- 后台页面集中在 `src/app/admin/page.tsx`
+- 评委工作台位于 `src/app/judge/page.tsx`
 
-### 1.2 数据库设计 (Prisma Schema)
+### 1.2 后端
 
-**文件**: `prisma/schema.prisma`
+- 使用 Next.js Route Handlers 作为 API 层
+- 主要 API 位于 `src/app/api`
+- 认证依赖 NextAuth Credentials Provider
+- 数据访问统一通过 Prisma
 
-定义了以下数据模型:
+### 1.3 数据库
 
-| 模型 | 说明 | 关键字段 |
-|------|------|----------|
-| User | 用户 | name, email, password, role, school, studentId, phone |
-| Competition | 赛题 | title, description, content, startTime, endTime, status, attachmentName, attachmentPath |
-| Announcement | 公告 | title, content, pinned, published |
-| Submission | 提交 | fileName, filePath, teamName, teamMembers, score, feedback, status |
+- 数据库类型: SQLite
+- ORM: Prisma
+- Prisma Schema: `prisma/schema.prisma`
+- Prisma 客户端单例: `src/lib/prisma.ts`
 
-### 1.3 认证系统
+### 1.4 当前生产启动方式
 
-**文件**: `src/lib/auth.ts`
+- 推荐入口: `server.js`
+- PM2 启动命令:
 
-- 使用 NextAuth Credentials Provider，基于邮箱+密码登录
-- JWT Session 策略，有效期 7 天
-- 角色扩展: session 中携带 `role` 和 `id` 字段
-- 管理员种子账号: `admin@mathoi.com` / `admin123`
+```powershell
+pm2 start server.js --name mcm
+```
+
+- Windows 一键部署脚本: `deploy.ps1`
+- Linux 部署脚本: `deploy.sh`
 
 ---
 
-## 二、核心功能开发
+## 二、项目核心功能现状
 
-### 2.1 用户注册与登录
+### 2.1 用户与认证
 
-| 文件 | 功能 |
-|------|------|
-| `src/app/api/register/route.ts` | 用户注册 API，密码 bcrypt 加密 |
-| `src/app/login/page.tsx` | 登录页面，邮箱+密码表单 |
-| `src/app/register/page.tsx` | 注册页面，含学校/学号/手机可选字段 |
+相关文件:
+
+- `src/lib/auth.ts`
+- `src/app/api/auth/[...nextauth]/route.ts`
+- `src/app/api/register/route.ts`
+- `src/app/login/page.tsx`
+- `src/app/register/page.tsx`
+
+已实现:
+
+- 邮箱 + 密码登录
+- 密码 bcrypt 加密
+- NextAuth JWT Session
+- Session 中持久化 `user.id` 与 `user.role`
+- 登录失败日志记录
+- 登录失败锁定策略
+- 用户资料字段: 学校、学号、手机号
+
+当前角色体系:
+
+- `user`: 普通用户
+- `judge`: 评委
+- `admin`: 普通管理员
+- `super_admin`: 高级管理员
+
+权限规则:
+
+- `user`: 只能参与比赛、查看自己的信息与提交
+- `judge`: 只能进入评委工作台，执行匿名评审
+- `admin`: 可进入管理后台，但不能评审、不能评奖
+- `super_admin`: 可进入后台，可评审、可评奖、可查看实名评审信息
+
+说明:
+
+- 用户角色修改默认仅允许 `super_admin`
+- 如果系统中没有任何 `super_admin`，允许创建第一个高级管理员，避免系统锁死
+
+---
 
 ### 2.2 赛题管理
 
-| 文件 | 功能 |
-|------|------|
-| `src/app/api/competitions/route.ts` | GET 赛题列表 / POST 创建赛题 (FormData, 附件上传) |
-| `src/app/api/competitions/[id]/route.ts` | GET 详情 / PUT 更新 / DELETE 删除 (含附件清理) |
-| `src/app/competitions/page.tsx` | 赛题列表前台页面 |
-| `src/app/competitions/[id]/page.tsx` | 赛题详情页 + 论文提交表单 |
+相关文件:
 
-**附件上传**:
-- 存储路径: `public/uploads/competitions/`
-- 文件名格式: `comp_{timestamp}{ext}`
-- 大小限制: 10MB (前后端双重校验)
+- `src/app/api/competitions/route.ts`
+- `src/app/api/competitions/[id]/route.ts`
+- `src/app/competitions/page.tsx`
+- `src/app/competitions/[id]/page.tsx`
 
-### 2.3 论文提交
+已实现:
 
-| 文件 | 功能 |
-|------|------|
-| `src/app/api/submissions/route.ts` | GET 提交列表 / POST 提交论文 (10MB 限制) |
-| `src/app/api/submissions/[id]/route.ts` | PUT 评分/反馈 (管理员) |
-| `src/app/my-submissions/page.tsx` | "我的提交" 页面 |
+- 创建赛题
+- 编辑赛题
+- 删除赛题
+- 赛题附件上传与替换
+- 前台赛题列表展示
+- 赛题详情页展示
 
-**提交条件**: 赛题 status 为 `active` 且未过截止时间
+赛题主要字段:
 
-### 2.4 公告系统
-
-| 文件 | 功能 |
-|------|------|
-| `src/app/api/announcements/route.ts` | GET 公告列表 / POST 创建公告 |
-| `src/app/api/announcements/[id]/route.ts` | PUT 更新 / DELETE 删除 |
-| `src/components/AnnouncementList.tsx` | 首页公告展示组件 |
-
-**功能**: 置顶、发布/取消发布、CRUD
+- 标题、简介、正文
+- 开始时间、截止时间
+- 状态控制
+- 附件名称与路径
 
 ---
 
-## 三、管理后台
+### 2.3 提交系统
 
-**文件**: `src/app/admin/page.tsx`
+相关文件:
 
-### 3.1 功能 Tab
+- `src/app/api/submissions/route.ts`
+- `src/app/api/submissions/[id]/route.ts`
+- `src/app/api/submissions/batch/route.ts`
+- `src/app/my-submissions/page.tsx`
 
-| Tab | 功能 |
-|-----|------|
-| 赛题管理 | 创建/编辑/删除赛题，附件上传/替换/移除 |
-| 提交评审 | 查看所有提交，评分、写评语 |
-| 用户管理 | 编辑用户信息、删除用户 (级联删除提交和文件) |
-| 公告管理 | 发布/编辑/删除公告，置顶/取消置顶，发布/取消发布 |
-| 文件存储 | 查看所有上传文件，下载/删除，显示总大小 |
+已实现:
 
-### 3.2 管理 API
+- 用户提交论文
+- 提交文件上传
+- 重交与版本控制
+- 最新版本标记 `isLatest`
+- 管理员查看提交列表
+- 批量评分、批量评奖、批量公示、批量删除
+- 用户删除自己的未评分提交
+- 我的提交页查看历史提交
 
-| 文件 | 功能 |
-|------|------|
-| `src/app/api/admin/users/route.ts` | GET 用户列表 |
-| `src/app/api/admin/users/[id]/route.ts` | PUT 编辑用户 / DELETE 删除用户 |
-| `src/app/api/admin/files/route.ts` | GET 文件列表 / DELETE 删除文件 |
+当前设计说明:
 
----
-
-## 四、稳定性增强与部署准备
-
-### 4.1 安全加固
-
-| 改动 | 文件 |
-|------|------|
-| 安全响应头 (X-Content-Type-Options, X-Frame-Options 等) | `next.config.mjs` |
-| 关闭 X-Powered-By | `next.config.mjs` |
-| API 限流 (认证10次/分钟，通用100次/分钟) | `src/middleware.ts` |
-| NextAuth 显式 secret + 7天 session | `src/lib/auth.ts` |
-
-### 4.2 错误处理
-
-| 文件 | 功能 |
-|------|------|
-| `src/app/error.tsx` | 全局错误边界，显示错误提示 + 重试按钮 |
-| `src/app/not-found.tsx` | 404 页面 |
-| `src/app/loading.tsx` | 全局加载状态 |
-| `src/lib/env.ts` | 环境变量验证 |
-
-### 4.3 文件下载修复
-
-**问题**: 动态上传的文件通过静态路径 `/uploads/xxx` 在生产模式下无法访问
-
-**修复**: 创建 `src/app/api/download/route.ts`
-- 通过 API 流式返回文件
-- 路径遍历攻击防护 (只允许 `/uploads/` 前缀)
-- 正确的 MIME 类型和中文文件名支持
-
-### 4.4 数据库
-
-- 从 `db push` 迁移到 `prisma migrate`，生成正式迁移文件
-- Prisma Client 添加条件日志 + 优雅断连
-
-### 4.5 健康检查
-
-**文件**: `src/app/api/health/route.ts`
-
-```
-GET /api/health → { status: "healthy", checks: { database, filesystem } }
-```
+- 默认只展示最新版本
+- 管理端可按需要查看更多提交数据
+- 上传文件仍是文件系统存储，不走对象存储
 
 ---
 
-## 五、部署配置
+### 2.4 团队赛
 
-### 5.1 生产构建
+相关文件:
 
-```bash
-npm run build  # ✓ 零错误通过
-```
+- `src/app/api/teams/route.ts`
+- `src/app/api/teams/[id]/route.ts`
+- `src/app/api/teams/join/route.ts`
+- `src/app/teams/page.tsx`
 
-### 5.2 配置文件
+已实现:
 
-| 文件 | 用途 |
-|------|------|
-| `ecosystem.config.js` | PM2 进程管理配置 (自动重启、内存限制、日志) |
-| `.env.example` | 环境变量模板 (含生产配置说明) |
-| `DEPLOY.md` | 完整部署文档 (Nginx/HTTPS/备份) |
-| `deploy.sh` | 一键部署脚本 |
+- 创建团队
+- 加入团队
+- 团队详情查看
+- 队长管理成员
+- 队长解散团队
+- 成员退出团队
+- 提交与团队关联
 
-### 5.3 一键部署脚本 (`deploy.sh`)
+说明:
 
-自动完成: 安装 Node.js/PM2/Nginx → 配置环境变量 → 安装依赖 → 数据库迁移 → 构建 → PM2 启动 → Nginx 反向代理 → 可选 HTTPS → 定时备份
-
----
-
-## 六、项目文件结构
-
-```
-MathoiMCM/
-├── prisma/
-│   ├── schema.prisma          # 数据模型
-│   ├── seed.ts                # 种子数据 (管理员)
-│   └── migrations/            # 数据库迁移
-├── public/uploads/            # 上传文件存储
-│   └── competitions/          # 赛题附件
-├── src/
-│   ├── app/
-│   │   ├── layout.tsx         # 根布局
-│   │   ├── page.tsx           # 首页
-│   │   ├── error.tsx          # 错误边界
-│   │   ├── not-found.tsx      # 404
-│   │   ├── loading.tsx        # 加载状态
-│   │   ├── globals.css        # 全局样式
-│   │   ├── login/page.tsx     # 登录
-│   │   ├── register/page.tsx  # 注册
-│   │   ├── competitions/
-│   │   │   ├── page.tsx       # 赛题列表
-│   │   │   └── [id]/page.tsx  # 赛题详情+提交
-│   │   ├── my-submissions/page.tsx  # 我的提交
-│   │   ├── admin/page.tsx     # 管理后台
-│   │   └── api/
-│   │       ├── auth/[...nextauth]/route.ts
-│   │       ├── register/route.ts
-│   │       ├── competitions/route.ts
-│   │       ├── competitions/[id]/route.ts
-│   │       ├── submissions/route.ts
-│   │       ├── submissions/[id]/route.ts
-│   │       ├── announcements/route.ts
-│   │       ├── announcements/[id]/route.ts
-│   │       ├── admin/users/route.ts
-│   │       ├── admin/users/[id]/route.ts
-│   │       ├── admin/files/route.ts
-│   │       ├── download/route.ts
-│   │       └── health/route.ts
-│   ├── components/
-│   │   ├── Navbar.tsx         # 导航栏
-│   │   ├── Providers.tsx      # NextAuth Provider
-│   │   └── AnnouncementList.tsx  # 公告组件
-│   ├── lib/
-│   │   ├── prisma.ts          # Prisma 客户端
-│   │   ├── auth.ts            # NextAuth 配置
-│   │   ├── utils.ts           # 工具函数
-│   │   └── env.ts             # 环境变量验证
-│   ├── types/next-auth.d.ts   # 类型声明
-│   └── middleware.ts          # API 限流
-├── package.json
-├── next.config.mjs
-├── tailwind.config.ts
-├── ecosystem.config.js        # PM2 配置
-├── deploy.sh                  # 一键部署脚本
-├── DEPLOY.md                  # 部署文档
-└── WORKLOG.md                 # 本文件
-```
+- 团队相关能力已可用
+- 后续仍可增强队长转让、团队锁定、按赛题配置团队模式等能力
 
 ---
 
-## 七、关键配置
+### 2.5 多评委评分与评审
 
-| 项目 | 值 |
-|------|-----|
-| 默认管理员 | admin@mathoi.com / admin123 |
-| 数据库 | SQLite (file:./dev.db) |
-| 文件上传限制 | 10MB |
-| Session 有效期 | 7 天 |
-| API 限流 | 认证 10次/分钟，通用 100次/分钟 |
-| 数据库备份 | 每日凌晨2点 (保留30天) |
+相关文件:
+
+- `src/app/judge/page.tsx`
+- `src/app/api/judge-scores/route.ts`
+- `src/lib/roles.ts`
+
+已实现:
+
+- 评委工作台
+- 多评委独立打分
+- 平均分回写提交记录
+- 高级管理员可后台评审
+- 普通管理员不能评审
+- 评委执行匿名评审
+
+匿名评审规则:
+
+- `judge` 获取提交列表时返回匿名数据
+- 隐藏用户实名信息
+- 隐藏 `userId`
+- 隐藏团队展示信息
+- 使用 `anonymousCode` 作为评审编号
+
+当前评审角色规则:
+
+- `judge`: 匿名评分
+- `super_admin`: 后台评分、评奖、公示
+- `admin`: 不可评分
+
+---
+
+### 2.6 作品公示、评论与点赞
+
+相关文件:
+
+- `src/app/api/showcase/route.ts`
+- `src/app/api/showcase/[id]/comments/route.ts`
+- `src/app/api/showcase/[id]/comments/[commentId]/route.ts`
+- `src/app/api/showcase/[id]/like/route.ts`
+- `src/components/ShowcaseInteraction.tsx`
+
+已实现:
+
+- 作品公示列表
+- 评论发布
+- 点赞切换
+- 评论删除与隐藏
+- 全站评论/点赞开关
+
+站点配置项:
+
+- `SiteConfig.commentsEnabled`
+
+效果:
+
+- 管理员可关闭互动功能
+- 关闭后不能新增评论和点赞
+- 旧评论仍可查看
+
+---
+
+### 2.7 公告与通知
+
+相关文件:
+
+- `src/app/api/announcements/route.ts`
+- `src/app/api/announcements/[id]/route.ts`
+- `src/app/api/notifications/route.ts`
+- `src/app/api/admin/notifications/route.ts`
+
+已实现:
+
+- 公告发布与置顶
+- 公告前台展示
+- 站内通知发送
+- 已读/未读状态
+- 后台通知管理
+
+---
+
+### 2.8 后台管理
+
+主文件:
+
+- `src/app/admin/page.tsx`
+
+主要模块:
+
+- 仪表盘
+- 赛题管理
+- 提交管理
+- 用户管理
+- 文件管理
+- 公告管理
+- 登录日志
+- 数据清理
+- 站点设置
+- 通知发送
+- 模板管理
+
+说明:
+
+- 当前后台是单大页实现
+- 功能完整，但文件较大，后续可按模块拆分组件
+
+---
+
+## 三、数据库模型现状
+
+关键模型:
+
+- `User`
+- `Competition`
+- `Submission`
+- `Announcement`
+- `Notification`
+- `LoginLog`
+- `SiteConfig`
+- `Team`
+- `TeamMember`
+- `JudgeScore`
+- `ShowcaseComment`
+- `ShowcaseLike`
+
+当前数据库特点:
+
+- SQLite 作为主库
+- 适合当前 40 人左右规模
+- 已针对低配服务器做优化
+
+---
+
+## 四、稳定性与性能优化记录
+
+### 4.1 Prisma 与 SQLite 优化
+
+文件:
+
+- `src/lib/prisma.ts`
+
+已做改动:
+
+- PrismaClient 单例化
+- 设置 SQLite `WAL` 模式
+- 设置 `synchronous = NORMAL`
+- 设置 `busy_timeout = 5000`
+- 使用 `$queryRawUnsafe` 执行 SQLite `PRAGMA`，避免 `Execute returned results` 错误
+
+### 4.2 SSR / ESM 兼容修复
+
+文件:
+
+- `src/components/MarkdownRenderer.tsx`
+
+问题:
+
+- SSR 期间 `isomorphic-dompurify` 拉入 `jsdom`，触发 `ERR_REQUIRE_ESM`
+
+修复:
+
+- 改为客户端动态导入 `dompurify`
+- 避免 SSR 期间加载不兼容依赖
+
+### 4.3 限流与安全
+
+文件:
+
+- `src/middleware.ts`
+- `src/lib/auth.ts`
+- `src/lib/fileType.ts`
+
+已做改动:
+
+- API 统一限流
+- 登录失败锁定
+- 上传文件类型校验
+- 评论频率限制
+- 下载接口路径校验
+
+### 4.4 健康检查与清理
+
+文件:
+
+- `src/app/api/health/route.ts`
+- `src/app/api/admin/cleanup/route.ts`
+
+已实现:
+
+- 健康检查接口
+- 孤立文件清理
+- 旧日志清理
+- 已读通知清理
+
+---
+
+## 五、部署与运维记录
+
+### 5.1 Windows Server 2025 部署
+
+相关文件:
+
+- `server.js`
+- `deploy.ps1`
+- `deploy-windows.ps1`
+- `ecosystem.config.js`
+
+关键结论:
+
+- Windows 上 `pm2 start npm -- start` 容易出问题
+- 当前稳定方案是让 PM2 直接跑 `server.js`
+
+推荐启动方式:
+
+```powershell
+pm2 start server.js --name mcm
+```
+
+推荐更新方式:
+
+```powershell
+cd C:\codeworks
+pm2 delete mcm
+git fetch origin
+git reset --hard origin/main
+npm install
+npx prisma generate
+npx prisma db push
+Remove-Item -Recurse -Force .next -ErrorAction SilentlyContinue
+$env:NODE_OPTIONS="--max-old-space-size=1536"
+npm run build
+pm2 start server.js --name mcm
+pm2 save
+pm2 logs mcm --lines 20 --nostream
+```
+
+### 5.2 Linux 部署
+
+相关文件:
+
+- `deploy.sh`
+- `DEPLOY.md`
+
+说明:
+
+- 已提供 Linux 部署方案
+- 但当前实际主要以 Windows Server 路线为准
+
+---
+
+## 六、重要配置与常量
+
+当前常见配置:
+
+- 数据库: SQLite
+- 默认文件上传限制: 10MB
+- 最大提交版本数: 5
+- 评论限流: 每用户每分钟 5 条
+- 通知标题最大长度: 200
+- 通知内容最大长度: 2000
+- 低配服务器目标: 2 核 / 2GB / 40GB SSD
+
+环境变量重点:
+
+- `DATABASE_URL`
+- `NEXTAUTH_URL`
+- `NEXTAUTH_SECRET`
+
+生产环境注意:
+
+- `NEXTAUTH_SECRET` 必须存在
+- `.env` 不能漏配
+
+---
+
+## 七、重要文件清单
+
+### 7.1 配置与启动
+
+- `package.json`
+- `next.config.mjs`
+- `tailwind.config.ts`
+- `postcss.config.mjs`
+- `server.js`
+- `ecosystem.config.js`
+
+### 7.2 数据与认证
+
+- `prisma/schema.prisma`
+- `prisma/seed.ts`
+- `src/lib/prisma.ts`
+- `src/lib/auth.ts`
+- `src/lib/roles.ts`
+
+### 7.3 关键页面
+
+- `src/app/admin/page.tsx`
+- `src/app/judge/page.tsx`
+- `src/app/competitions/[id]/page.tsx`
+- `src/app/my-submissions/page.tsx`
+- `src/app/teams/page.tsx`
+- `src/app/showcase/page.tsx`
+
+### 7.4 关键接口
+
+- `src/app/api/submissions/route.ts`
+- `src/app/api/submissions/[id]/route.ts`
+- `src/app/api/submissions/batch/route.ts`
+- `src/app/api/judge-scores/route.ts`
+- `src/app/api/site-config/route.ts`
+- `src/app/api/admin/users/[id]/route.ts`
+- `src/app/api/showcase/[id]/comments/route.ts`
+- `src/app/api/showcase/[id]/like/route.ts`
+
+---
+
+## 八、近期关键改动记录
+
+### 已完成
+
+- 增加团队赛支持
+- 增加多评委评分
+- 增加通知系统
+- 增加作品公示、评论、点赞
+- 增加站点配置项 `commentsEnabled`
+- 管理员可关闭评论与点赞
+- 修复 Prisma SQLite `PRAGMA` 调用方式
+- 修复 Markdown 渲染的 ESM / SSR 问题
+- 增加 Windows 服务器稳定部署方案
+- 新增角色工具 `src/lib/roles.ts`
+- 完成管理员 / 高级管理员 / 评委分级
+- 评委改为仅匿名评审
+- 普通管理员无法评审与评奖
+
+### 最近通过验证的结果
+
+- `git status` 干净
+- `npx tsc --noEmit` 通过
+- `npm run build` 通过
+- `npm run dev` 本地可启动
+
+---
+
+## 九、当前已知问题与后续建议
+
+### 建议优先处理
+
+- 上传仍是整文件读入内存，低配服务器下并发上传有压力
+- 团队赛版本淘汰逻辑仍建议按 `teamId + competitionId` 做更精确控制
+- 删除最新提交后应进一步确保 `isLatest` 修复逻辑绝对一致
+- 登录锁定建议从单纯按邮箱升级为 `email + ip`
+
+### 结构性建议
+
+- 将 `src/app/admin/page.tsx` 拆分为多个组件
+- 增加评委分配机制
+- 增加评分维度 Rubric
+- 增加最低评审人数控制
+- 增加成绩发布开关与评分锁定
+
+---
+
+## 十、IDE 迁移提示
+
+如果迁移到其他 IDE 或交给新的协作人，建议优先让对方阅读顺序如下:
+
+1. `WORKLOG.md`
+2. `prisma/schema.prisma`
+3. `src/lib/auth.ts`
+4. `src/lib/roles.ts`
+5. `src/lib/prisma.ts`
+6. `src/app/admin/page.tsx`
+7. `src/app/judge/page.tsx`
+8. `DEPLOY.md`
+9. `deploy.ps1`
+
+迁移后的首个验证命令:
+
+```powershell
+npm install
+npx prisma generate
+npx prisma db push
+npx tsc --noEmit
+npm run build
+npm run dev
+```
+
+---
+
+## 十一、当前结论
+
+该项目目前已经具备可用的竞赛平台主流程，适合继续在现有架构上迭代。
+
+当前最重要的事实是:
+
+- 平台已可正常运行
+- 后台、团队赛、多评委、通知、公示等能力已具备
+- Windows Server 2025 部署路径已打通
+- 评审权限已完成分级
+- 当前版本通过了类型检查、生产构建和本地启动验证
+
+本文件可作为后续迁移到其他 IDE、交给其他开发者接手、或未来继续开发时的项目总览与交接依据。
