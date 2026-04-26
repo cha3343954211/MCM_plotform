@@ -47,6 +47,9 @@ export default function AdminPage() {
   const [subStatusFilter, setSubStatusFilter] = useState<'all' | 'pending' | 'graded'>('all');
   const [teamSearch, setTeamSearch] = useState('');
   const [teamCompetitionFilter, setTeamCompetitionFilter] = useState('all');
+  const [collapsedTeamComps, setCollapsedTeamComps] = useState<Set<string>>(new Set());
+  const [editingTeamLimitId, setEditingTeamLimitId] = useState<string | null>(null);
+  const [teamLimitValue, setTeamLimitValue] = useState('');
   const [expandedComps, setExpandedComps] = useState<Set<string>>(new Set());
   // 批量操作
   const [selectedSubs, setSelectedSubs] = useState<Set<string>>(new Set());
@@ -237,6 +240,32 @@ export default function AdminPage() {
       }
     } catch {
       setMessage('解散团队失败');
+    }
+  };
+
+  const handleUpdateTeamLimit = async (team: any) => {
+    const maxMembers = Number(teamLimitValue);
+    if (!Number.isFinite(maxMembers) || maxMembers < (team.members?.length || 1) || maxMembers > 20) {
+      setMessage(`人数上限必须在 ${team.members?.length || 1}-20 之间`);
+      return;
+    }
+    try {
+      const res = await fetch(`/api/teams/${team.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ maxMembers }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        setMessage('团队人数上限已更新');
+        setEditingTeamLimitId(null);
+        setTeamLimitValue('');
+        await loadTeams();
+      } else {
+        setMessage(data.error || '更新人数上限失败');
+      }
+    } catch {
+      setMessage('更新人数上限失败');
     }
   };
 
@@ -473,6 +502,18 @@ export default function AdminPage() {
         );
     });
   }, [teamCompetitionFilter, teamSearch, teams]);
+
+  const groupedTeams = useMemo(() => {
+    const groups = new Map<string, { competition: any; teams: any[] }>();
+    for (const team of filteredTeams) {
+      const key = team.competitionId || 'unknown';
+      if (!groups.has(key)) {
+        groups.set(key, { competition: team.competition || { id: key, title: '未关联赛题' }, teams: [] });
+      }
+      groups.get(key)!.teams.push(team);
+    }
+    return Array.from(groups.entries());
+  }, [filteredTeams]);
 
   if (status === 'loading' || loading) {
     return <div className="max-w-7xl mx-auto px-4 py-20 text-center text-gray-500">加载中...</div>;
@@ -1031,11 +1072,32 @@ export default function AdminPage() {
           </div>
 
           <div className="grid gap-4">
-            {filteredTeams.length === 0 ? (
+            {groupedTeams.length === 0 ? (
               <div className="bg-white rounded-xl border border-gray-200 p-10 text-center text-gray-400">
                 暂无团队
               </div>
-            ) : filteredTeams.map((team: any) => (
+            ) : groupedTeams.map(([compId, group]: any) => {
+              const collapsed = collapsedTeamComps.has(compId);
+              return (
+                <div key={compId} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                  <button
+                    onClick={() => {
+                      const next = new Set(collapsedTeamComps);
+                      if (next.has(compId)) next.delete(compId); else next.add(compId);
+                      setCollapsedTeamComps(next);
+                    }}
+                    className="w-full flex flex-wrap items-center justify-between gap-3 px-5 py-4 bg-gray-50 hover:bg-gray-100 transition text-left"
+                  >
+                    <div>
+                      <h3 className="font-semibold text-gray-900">{group.competition?.title || '未关联赛题'}</h3>
+                      <p className="text-xs text-gray-400 mt-0.5">团队 {group.teams.length} 个</p>
+                    </div>
+                    {collapsed ? <ChevronDown className="w-5 h-5 text-gray-400" /> : <ChevronUp className="w-5 h-5 text-gray-400" />}
+                  </button>
+
+                  {!collapsed && (
+                    <div className="p-4 grid gap-4">
+                      {group.teams.map((team: any) => (
               <div key={team.id} className="bg-white rounded-xl border border-gray-200 p-5">
                 <div className="flex flex-wrap items-start justify-between gap-4 mb-4">
                   <div>
@@ -1053,6 +1115,37 @@ export default function AdminPage() {
                     <span className="px-2.5 py-1 rounded-lg text-xs bg-gray-50 text-gray-600">
                       {team._count?.members || team.members?.length || 0}/{team.maxMembers} 人
                     </span>
+                    {editingTeamLimitId === team.id ? (
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="number"
+                          min={team.members?.length || 1}
+                          max={20}
+                          value={teamLimitValue}
+                          onChange={(e) => setTeamLimitValue(e.target.value)}
+                          className="w-20 px-2 py-1 text-xs bg-white border border-gray-200 rounded-lg outline-none"
+                        />
+                        <button
+                          onClick={() => handleUpdateTeamLimit(team)}
+                          className="px-2 py-1 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-500"
+                        >
+                          保存
+                        </button>
+                        <button
+                          onClick={() => { setEditingTeamLimitId(null); setTeamLimitValue(''); }}
+                          className="px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200"
+                        >
+                          取消
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => { setEditingTeamLimitId(team.id); setTeamLimitValue(String(team.maxMembers || 5)); }}
+                        className="px-3 py-1.5 text-xs bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition"
+                      >
+                        调整人数上限
+                      </button>
+                    )}
                     <span className="px-2.5 py-1 rounded-lg text-xs bg-green-50 text-green-600">
                       提交 {team._count?.submissions || 0}
                     </span>
@@ -1136,7 +1229,12 @@ export default function AdminPage() {
                   </div>
                 )}
               </div>
-            ))}
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
