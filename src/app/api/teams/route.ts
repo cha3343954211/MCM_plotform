@@ -15,6 +15,7 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const competitionId = searchParams.get('competitionId') || undefined;
   const admin = searchParams.get('admin') === '1';
+  const publicList = searchParams.get('public') === '1';
 
   if (admin && isAdminRole(session.user.role)) {
     const teams = await (prisma as any).team.findMany({
@@ -50,6 +51,28 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(teams);
   }
 
+  if (publicList && competitionId) {
+    const teams = await (prisma as any).team.findMany({
+      where: { competitionId },
+      select: {
+        id: true,
+        name: true,
+        maxMembers: true,
+        leader: { select: { id: true, name: true, school: true } },
+        members: { select: { userId: true }, take: 50 },
+        joinRequests: { where: { userId: session.user.id, status: 'pending' }, select: { id: true } },
+        _count: { select: { members: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+    });
+    return NextResponse.json(teams.map((team: any) => ({
+      ...team,
+      hasPendingRequest: team.joinRequests.length > 0,
+      joinRequests: undefined,
+    })));
+  }
+
   const memberships = await (prisma as any).teamMember.findMany({
     where: {
       userId: session.user.id,
@@ -63,7 +86,6 @@ export async function GET(request: NextRequest) {
             include: { user: { select: { id: true, name: true, email: true, school: true } } },
           },
           submissions: {
-            where: { isLatest: true },
             select: {
               id: true,
               fileName: true,
@@ -75,7 +97,13 @@ export async function GET(request: NextRequest) {
               createdAt: true,
             },
             orderBy: { createdAt: 'desc' },
-            take: 5,
+            take: 20,
+          },
+          joinRequests: {
+            where: { status: 'pending' },
+            include: { user: { select: { id: true, name: true, email: true, school: true } } },
+            orderBy: { createdAt: 'desc' },
+            take: 20,
           },
           _count: { select: { submissions: true } },
         },
@@ -100,7 +128,6 @@ export async function POST(request: NextRequest) {
   try { body = await request.json(); } catch { return NextResponse.json({ error: '请求格式错误' }, { status: 400 }); }
   const name = String(body?.name || '').trim().slice(0, 50);
   const competitionId = String(body?.competitionId || '').trim();
-  const maxMembers = Math.max(1, Math.min(20, Number(body?.maxMembers) || 5));
 
   if (!name || !competitionId) {
     return NextResponse.json({ error: '团队名和赛题 id 必填' }, { status: 400 });
@@ -134,7 +161,7 @@ export async function POST(request: NextRequest) {
       inviteCode,
       competitionId,
       leaderId: session.user.id,
-      maxMembers,
+      maxMembers: Math.max(1, Math.min(20, (competition as any).teamMaxMembers || 5)),
       members: { create: { userId: session.user.id, role: 'leader' } },
     },
     include: {

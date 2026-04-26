@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
-import { FileText, ExternalLink, ArrowRight, Trash2 } from 'lucide-react';
+import { FileText, ExternalLink, ArrowRight, Trash2, Award, Download } from 'lucide-react';
 import { formatDate, getStatusLabel, getStatusColor, getAwardLabel, getAwardColor } from '@/lib/utils';
 import { useSiteConfig } from '@/components/SiteConfigProvider';
 
@@ -116,8 +116,14 @@ export default function MySubmissionsPage() {
               {sub.award && (
                 <div className="mt-2">
                   <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-xs font-semibold ring-1 ${getAwardColor(sub.award)}`}>
-                    {getAwardLabel(sub.award)}
+                    <Award className="w-3.5 h-3.5" /> {getAwardLabel(sub.award)}
                   </span>
+                  <button
+                    onClick={() => window.print()}
+                    className="ml-2 inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-xs font-medium bg-blue-50 text-blue-600 hover:bg-blue-100"
+                  >
+                    <Download className="w-3.5 h-3.5" /> 打印/保存证书
+                  </button>
                 </div>
               )}
               <p className="text-xs text-gray-300 mt-1">提交时间: {formatDate(sub.createdAt)}</p>

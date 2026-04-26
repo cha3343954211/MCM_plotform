@@ -24,6 +24,7 @@ model User {
   comments      ShowcaseComment[]
   likes         ShowcaseLike[]
   teamMemberships TeamMember[]
+  teamJoinRequests TeamJoinRequest[]
   ledTeams      Team[]       @relation("TeamLeader")
   judgeScores   JudgeScore[]
 }
@@ -193,6 +194,7 @@ model Team {
   competition   Competition  @relation(fields: [competitionId], references: [id], onDelete: Cascade)
   leader        User         @relation("TeamLeader", fields: [leaderId], references: [id])
   members       TeamMember[]
+  joinRequests  TeamJoinRequest[]
   submissions   Submission[]
 
   @@index([competitionId])
@@ -209,6 +211,22 @@ model TeamMember {
 
   @@id([teamId, userId])
   @@index([userId])
+}
+
+model TeamJoinRequest {
+  id        String   @id @default(cuid())
+  teamId    String
+  userId    String
+  message   String?
+  status    String   @default("pending") // "pending" | "approved" | "rejected"
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, userId])
+  @@index([userId, status])
+  @@index([teamId, status])
 }
 
 // =============== 多评委打分 ===============
