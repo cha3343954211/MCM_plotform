@@ -5,6 +5,7 @@ import prisma from '@/lib/prisma';
 import { writeFile, mkdir, unlink } from 'fs/promises';
 import path from 'path';
 import { validateUpload } from '@/lib/fileType';
+import { canReview, isAdminRole, isSuperAdminRole } from '@/lib/roles';
 
 async function getSiteConfig() {
   try {
@@ -52,7 +53,7 @@ export async function GET(request: NextRequest) {
     const userIdFilter = searchParams.get('userId') || undefined;
 
     const where: any = {};
-    if (session.user.role === 'admin') {
+    if (isAdminRole(session.user.role)) {
       if (userIdFilter) where.userId = userIdFilter;
     } else if (session.user.role === 'judge') {
       // 评委可以看到所有提交（用于评分）
@@ -63,7 +64,7 @@ export async function GET(request: NextRequest) {
       where.competitionId = competitionId;
     }
     // 默认仅展示最新版本；admin 显式 versions=1 才返回历史版本
-    if (!(includeVersions && session.user.role === 'admin')) {
+    if (!(includeVersions && isAdminRole(session.user.role))) {
       where.isLatest = true;
     }
 
@@ -74,8 +75,20 @@ export async function GET(request: NextRequest) {
         competition: { select: { id: true, title: true } },
       },
       orderBy: { createdAt: 'desc' },
-      take: session.user.role === 'admin' ? 500 : 200,
+      take: isAdminRole(session.user.role) ? 500 : 200,
     });
+
+    if (session.user.role === 'judge') {
+      return NextResponse.json(submissions.map((s: any, index: number) => ({
+        ...s,
+        anonymousCode: `A-${String(index + 1).padStart(4, '0')}`,
+        userId: undefined,
+        user: null,
+        teamName: null,
+        teamMembers: null,
+        notes: null,
+      })));
+    }
 
     return NextResponse.json(submissions);
   } catch (error) {

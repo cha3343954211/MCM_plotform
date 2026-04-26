@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { unlink } from 'fs/promises';
 import path from 'path';
+import { isAdminRole, isSuperAdminRole } from '@/lib/roles';
 
 export async function PUT(
   request: NextRequest,
@@ -11,7 +12,7 @@ export async function PUT(
 ) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session || session.user.role !== 'admin') {
+    if (!session || !isAdminRole(session.user.role)) {
       return NextResponse.json({ error: '无权限' }, { status: 403 });
     }
 
@@ -21,7 +22,14 @@ export async function PUT(
     const data: any = {};
     if (name !== undefined) data.name = name;
     if (email !== undefined) data.email = email;
-    if (role !== undefined) data.role = role;
+    if (role !== undefined) {
+      const allowedRoles = new Set(['user', 'judge', 'admin', 'super_admin']);
+      if (!allowedRoles.has(role)) return NextResponse.json({ error: '角色不合法' }, { status: 400 });
+      const superCount = await prisma.user.count({ where: { role: 'super_admin' } });
+      const canSetRole = isSuperAdminRole(session.user.role) || (role === 'super_admin' && superCount === 0);
+      if (!canSetRole) return NextResponse.json({ error: '只有高级管理员可修改角色' }, { status: 403 });
+      data.role = role;
+    }
     if (school !== undefined) data.school = school || null;
     if (studentId !== undefined) data.studentId = studentId || null;
     if (phone !== undefined) data.phone = phone || null;
@@ -51,7 +59,7 @@ export async function DELETE(
 ) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session || session.user.role !== 'admin') {
+    if (!session || !isAdminRole(session.user.role)) {
       return NextResponse.json({ error: '无权限' }, { status: 403 });
     }
 

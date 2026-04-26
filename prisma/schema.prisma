@@ -12,7 +12,7 @@ model User {
   name          String
   email         String       @unique
   password      String
-  role          String       @default("user") // "user" | "judge" | "admin"
+  role          String       @default("user") // "user" | "judge" | "admin" | "super_admin"
   school        String?
   studentId     String?
   phone         String?

@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { unlink } from 'fs/promises';
 import path from 'path';
+import { canAward, isAdminRole } from '@/lib/roles';
 
 async function tryUnlink(relPath: string | null | undefined) {
   if (!relPath) return;
@@ -16,7 +17,7 @@ export async function PUT(
 ) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session || session.user.role !== 'admin') {
+    if (!session || !canAward(session.user.role)) {
       return NextResponse.json({ error: '无权限' }, { status: 403 });
     }
 
@@ -91,7 +92,7 @@ export async function DELETE(
     }
 
     const isOwner = submission.userId === session.user.id;
-    const isAdmin = session.user.role === 'admin';
+    const isAdmin = isAdminRole(session.user.role);
     if (!isOwner && !isAdmin) {
       return NextResponse.json({ error: '无权删除他人提交' }, { status: 403 });
     }

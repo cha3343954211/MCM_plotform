@@ -7,6 +7,7 @@ import { usePathname } from 'next/navigation';
 import { Menu, X, BookOpen, User, LogOut, Shield, Trophy, Users, Award } from 'lucide-react';
 import { useSiteConfig } from './SiteConfigProvider';
 import NotificationBell from './NotificationBell';
+import { canReview, isAdminRole, roleLabel } from '@/lib/roles';
 
 export default function Navbar() {
   const { data: session } = useSession();
@@ -40,8 +41,8 @@ export default function Navbar() {
     { href: '/showcase', label: '论文公示', show: true, icon: Trophy },
     { href: '/teams', label: '我的团队', show: !!session, icon: Users },
     { href: '/my-submissions', label: '我的提交', show: !!session },
-    { href: '/judge', label: '评委工作台', show: session?.user?.role === 'judge' || session?.user?.role === 'admin', icon: Award },
-    { href: '/admin', label: '管理后台', show: session?.user?.role === 'admin', icon: Shield },
+    { href: '/judge', label: '评委工作台', show: canReview(session?.user?.role), icon: Award },
+    { href: '/admin', label: '管理后台', show: isAdminRole(session?.user?.role), icon: Shield },
   ].filter(n => n.show);
 
   return (
@@ -81,11 +82,8 @@ export default function Navbar() {
                   className="text-[13px] text-gray-500 flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-black/[0.03] hover:bg-black/[0.06] transition-all duration-300">
                   <User className="w-3.5 h-3.5" />
                   {session.user.name}
-                  {session.user.role === 'admin' && (
-                    <span className="px-1.5 py-0.5 text-[10px] font-semibold rounded-md" style={{ background: `${config.primaryColor}15`, color: config.primaryColor }}>管理员</span>
-                  )}
-                  {session.user.role === 'judge' && (
-                    <span className="px-1.5 py-0.5 text-[10px] font-semibold rounded-md bg-amber-50 text-amber-700">评委</span>
+                  {session.user.role !== 'user' && (
+                    <span className="px-1.5 py-0.5 text-[10px] font-semibold rounded-md" style={{ background: `${config.primaryColor}15`, color: config.primaryColor }}>{roleLabel(session.user.role)}</span>
                   )}
                 </Link>
                 <button onClick={() => signOut({ callbackUrl: '/' })}
@@ -120,11 +118,8 @@ export default function Navbar() {
                   <div className="text-sm font-medium text-gray-900 truncate">{session.user.name}</div>
                   <div className="text-xs text-gray-400 truncate">{session.user.email}</div>
                 </div>
-                {session.user.role === 'admin' && (
-                  <span className="px-2 py-0.5 text-[10px] font-semibold rounded-md whitespace-nowrap" style={{ background: `${config.primaryColor}15`, color: config.primaryColor }}>管理员</span>
-                )}
-                {session.user.role === 'judge' && (
-                  <span className="px-2 py-0.5 text-[10px] font-semibold rounded-md whitespace-nowrap bg-amber-50 text-amber-700">评委</span>
+                {session.user.role !== 'user' && (
+                  <span className="px-2 py-0.5 text-[10px] font-semibold rounded-md whitespace-nowrap" style={{ background: `${config.primaryColor}15`, color: config.primaryColor }}>{roleLabel(session.user.role)}</span>
                 )}
               </div>
             </div>

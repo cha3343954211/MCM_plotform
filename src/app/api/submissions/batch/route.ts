@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { unlink } from 'fs/promises';
 import path from 'path';
+import { canAward, isAdminRole } from '@/lib/roles';
 
 export const dynamic = 'force-dynamic';
 
@@ -30,7 +31,7 @@ const ALLOWED_AWARDS = new Set(['special', 'first', 'second', 'third', 'excellen
 export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session || session.user.role !== 'admin') {
+    if (!session || !isAdminRole(session.user.role)) {
       return NextResponse.json({ error: '无权限' }, { status: 403 });
     }
 
@@ -47,6 +48,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (action === 'grade') {
+      if (!canAward(session.user.role)) return NextResponse.json({ error: '只有高级管理员可评分' }, { status: 403 });
       const data: any = {};
       if (typeof payload.score === 'number' && isFinite(payload.score)) {
         data.score = Math.max(0, Math.min(100, payload.score));
@@ -83,6 +85,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (action === 'award') {
+      if (!canAward(session.user.role)) return NextResponse.json({ error: '只有高级管理员可评奖' }, { status: 403 });
       const award = payload.award === null ? null : String(payload.award || '');
       if (!ALLOWED_AWARDS.has(award)) {
         return NextResponse.json({ error: '奖项参数不合法' }, { status: 400 });
@@ -94,6 +97,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (action === 'showcase') {
+      if (!canAward(session.user.role)) return NextResponse.json({ error: '只有高级管理员可设置公示' }, { status: 403 });
       if (typeof payload.showcased !== 'boolean') {
         return NextResponse.json({ error: '需要 showcased 布尔值' }, { status: 400 });
       }

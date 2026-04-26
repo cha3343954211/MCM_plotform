@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { Shield, Plus, FileText, Users, ChevronDown, ChevronUp, Download, Save, Trash2, Edit3, HardDrive, Upload, X, Paperclip, Megaphone, Pin, Settings, FileDown, Activity, CheckCircle2, XCircle, Key, Sparkles, Send, Bell, Search, BarChart3, Layers } from 'lucide-react';
 import MarkdownEditor from '@/components/MarkdownEditor';
 import { formatDate, getStatusLabel, getStatusColor, AWARD_OPTIONS, getAwardLabel, getAwardColor, GRADIENT_PRESETS, buildHeroGradient } from '@/lib/utils';
+import { isAdminRole, isSuperAdminRole, roleLabel } from '@/lib/roles';
 
 function formatFileSize(bytes: number) {
   if (bytes < 1024) return bytes + ' B';
@@ -16,6 +17,7 @@ function formatFileSize(bytes: number) {
 export default function AdminPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
+  const canAward = isSuperAdminRole(session?.user?.role);
   const [tab, setTab] = useState<'dashboard' | 'competitions' | 'submissions' | 'users' | 'files' | 'announcements' | 'loginLogs' | 'cleanup' | 'settings' | 'notifications' | 'templates'>('dashboard');
   const [siteConfigForm, setSiteConfigForm] = useState({
     siteName: '', siteDesc: '', heroTitle: '', heroDesc: '', footerText: '', primaryColor: '#2563eb', secondaryColor: '', gradientEnabled: false, gradientAngle: 160, logoUrl: '', bannerText: '', bannerEnabled: false, maxFileSize: 10, maxSubmissionVersions: 5, commentsEnabled: true,
@@ -117,7 +119,7 @@ export default function AdminPage() {
   }, [loadCompetitions, loadSubmissions, loadUsers]);
 
   useEffect(() => {
-    if (status !== 'authenticated' || session?.user?.role !== 'admin') return;
+    if (status !== 'authenticated' || !isAdminRole(session?.user?.role)) return;
     if (tab === 'files' && !loadedTabs.has('files')) loadFiles();
     if (tab === 'announcements' && !loadedTabs.has('announcements')) loadAnnouncements();
     if (tab === 'loginLogs' && !loadedTabs.has('loginLogs')) loadLoginLogs();
@@ -125,7 +127,7 @@ export default function AdminPage() {
 
   useEffect(() => {
     if (status === 'authenticated') {
-      if (session?.user?.role !== 'admin') {
+      if (!isAdminRole(session?.user?.role)) {
         router.push('/');
         return;
       }
@@ -826,16 +828,18 @@ export default function AdminPage() {
                         >
                           <Download className="w-3 h-3" /> 下载
                         </a>
-                        <button
-                          onClick={() => {
-                            setGradingId(gradingId === sub.id ? null : sub.id);
-                            setGradeForm({ score: sub.score?.toString() || '', feedback: sub.feedback || '', award: sub.award || '', showcased: sub.showcased || false });
-                          }}
-                          className="flex items-center gap-1 px-3 py-1.5 text-xs bg-primary-50 text-primary-600 rounded-lg hover:bg-primary-100 transition"
-                        >
-                          <Save className="w-3 h-3" /> 评分
-                          {gradingId === sub.id ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-                        </button>
+                        {canAward && (
+                          <button
+                            onClick={() => {
+                              setGradingId(gradingId === sub.id ? null : sub.id);
+                              setGradeForm({ score: sub.score?.toString() || '', feedback: sub.feedback || '', award: sub.award || '', showcased: sub.showcased || false });
+                            }}
+                            className="flex items-center gap-1 px-3 py-1.5 text-xs bg-primary-50 text-primary-600 rounded-lg hover:bg-primary-100 transition"
+                          >
+                            <Save className="w-3 h-3" /> 后台评审
+                            {gradingId === sub.id ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                          </button>
+                        )}
                         <button
                           onClick={() => handleDeleteSubmission(sub.id)}
                           className="flex items-center gap-1 px-3 py-1.5 text-xs bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition"
@@ -978,6 +982,7 @@ export default function AdminPage() {
                     <option value="user">用户</option>
                     <option value="judge">评委</option>
                     <option value="admin">管理员</option>
+                    <option value="super_admin">高级管理员</option>
                   </select>
                 </div>
                 <div>
@@ -1028,11 +1033,12 @@ export default function AdminPage() {
                       <td className="px-4 py-3 text-gray-500">{user.phone || '-'}</td>
                       <td className="px-4 py-3">
                         <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                          user.role === 'admin' ? 'bg-primary-100 text-primary-700'
+                          user.role === 'super_admin' ? 'bg-purple-50 text-purple-700 ring-1 ring-purple-200/50'
+                            : user.role === 'admin' ? 'bg-primary-100 text-primary-700'
                             : user.role === 'judge' ? 'bg-amber-50 text-amber-700 ring-1 ring-amber-200/50'
                             : 'bg-gray-100 text-gray-600'
                         }`}>
-                          {user.role === 'admin' ? '管理员' : user.role === 'judge' ? '评委' : '用户'}
+                          {roleLabel(user.role)}
                         </span>
                       </td>
                       <td className="px-4 py-3 text-gray-500">{user._count?.submissions || 0}</td>

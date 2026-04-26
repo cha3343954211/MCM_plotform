@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
+import { isAdminRole } from '@/lib/roles';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,7 +28,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   if (!team) return NextResponse.json({ error: '团队不存在' }, { status: 404 });
 
   const isMember = team.members.some((m: any) => m.userId === session.user.id);
-  if (!isMember && session.user.role !== 'admin') {
+  if (!isMember && !isAdminRole(session.user.role)) {
     return NextResponse.json({ error: '无权限' }, { status: 403 });
   }
 
@@ -43,7 +44,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   if (!team) return NextResponse.json({ error: '团队不存在' }, { status: 404 });
 
   const isLeader = team.leaderId === session.user.id;
-  const isAdmin = session.user.role === 'admin';
+  const isAdmin = isAdminRole(session.user.role);
   if (!isLeader && !isAdmin) return NextResponse.json({ error: '只有队长可操作' }, { status: 403 });
 
   const body = await req.json().catch(() => ({}));
@@ -79,7 +80,7 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
   if (!team) return NextResponse.json({ error: '团队不存在' }, { status: 404 });
 
   const isLeader = team.leaderId === session.user.id;
-  const isAdmin = session.user.role === 'admin';
+  const isAdmin = isAdminRole(session.user.role);
   const url = new URL(req.url);
   const action = url.searchParams.get('action') || (isLeader || isAdmin ? 'disband' : 'leave');
 

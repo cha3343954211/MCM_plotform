@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
+import { canReview, isSuperAdminRole } from '@/lib/roles';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,7 +17,7 @@ export async function GET(request: NextRequest) {
   if (!submissionId) return NextResponse.json({ error: '需要 submissionId' }, { status: 400 });
 
   const where: any = { submissionId };
-  if (session.user.role !== 'admin') {
+  if (!isSuperAdminRole(session.user.role)) {
     if (session.user.role !== 'judge') return NextResponse.json({ error: '无权限' }, { status: 403 });
     where.judgeId = session.user.id;
   }
@@ -29,7 +30,7 @@ export async function GET(request: NextRequest) {
 
   // 计算平均分（仅 admin 需要）
   let average: number | null = null;
-  if (session.user.role === 'admin' && scores.length > 0) {
+  if (isSuperAdminRole(session.user.role) && scores.length > 0) {
     const sum = scores.reduce((a: number, s: any) => a + s.score, 0);
     average = Math.round((sum / scores.length) * 100) / 100;
   }
@@ -41,8 +42,8 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: '请先登录' }, { status: 401 });
-  if (session.user.role !== 'judge' && session.user.role !== 'admin') {
-    return NextResponse.json({ error: '只有评委或管理员可打分' }, { status: 403 });
+  if (!canReview(session.user.role)) {
+    return NextResponse.json({ error: '只有评委或高级管理员可打分' }, { status: 403 });
   }
 
   let body: any;
@@ -88,7 +89,7 @@ export async function DELETE(request: NextRequest) {
 
   const score = await (prisma as any).judgeScore.findUnique({ where: { id } });
   if (!score) return NextResponse.json({ error: '记录不存在' }, { status: 404 });
-  if (session.user.role !== 'admin' && score.judgeId !== session.user.id) {
+  if (!isSuperAdminRole(session.user.role) && score.judgeId !== session.user.id) {
     return NextResponse.json({ error: '无权限' }, { status: 403 });
   }
   await (prisma as any).judgeScore.delete({ where: { id } });

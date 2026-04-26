@@ -3,8 +3,9 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
-import { Award, Download, Save, ChevronDown, ChevronUp, Search, FileText, Paperclip } from 'lucide-react';
+import { Award, Save, Search, Filter, CheckCircle2, FileText, ChevronUp, ChevronDown, Paperclip, Download } from 'lucide-react';
 import { formatDate } from '@/lib/utils';
+import { canReview, isSuperAdminRole } from '@/lib/roles';
 
 export default function JudgePage() {
   const { data: session, status } = useSession();
@@ -24,7 +25,7 @@ export default function JudgePage() {
       return;
     }
     if (status !== 'authenticated') return;
-    if (session?.user?.role !== 'judge' && session?.user?.role !== 'admin') {
+    if (!canReview(session?.user?.role)) {
       router.push('/');
       return;
     }
@@ -60,7 +61,8 @@ export default function JudgePage() {
       if (filter === 'unscored' && hasMyScore) return false;
       if (filter === 'scored' && !hasMyScore) return false;
       if (!q) return true;
-      return (s.user?.name || '').toLowerCase().includes(q)
+      return (s.anonymousCode || '').toLowerCase().includes(q)
+        || (s.user?.name || '').toLowerCase().includes(q)
         || (s.competition?.title || '').toLowerCase().includes(q)
         || (s.teamName || '').toLowerCase().includes(q);
     });
@@ -97,7 +99,7 @@ export default function JudgePage() {
     return <div className="max-w-6xl mx-auto px-4 py-20 text-center text-gray-500">加载中…</div>;
   }
 
-  const isAdmin = session?.user?.role === 'admin';
+  const isAdmin = isSuperAdminRole(session?.user?.role);
   const totalUnscored = submissions.filter((s) => !scoreCache[s.id]).length;
 
   return (
