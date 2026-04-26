@@ -18,7 +18,7 @@ export default function AdminPage() {
   const router = useRouter();
   const [tab, setTab] = useState<'competitions' | 'submissions' | 'users' | 'files' | 'announcements' | 'loginLogs' | 'cleanup' | 'settings' | 'notifications'>('competitions');
   const [siteConfigForm, setSiteConfigForm] = useState({
-    siteName: '', siteDesc: '', heroTitle: '', heroDesc: '', footerText: '', primaryColor: '#2563eb', secondaryColor: '', gradientEnabled: false, gradientAngle: 160, logoUrl: '', bannerText: '', bannerEnabled: false, maxFileSize: 10,
+    siteName: '', siteDesc: '', heroTitle: '', heroDesc: '', footerText: '', primaryColor: '#2563eb', secondaryColor: '', gradientEnabled: false, gradientAngle: 160, logoUrl: '', bannerText: '', bannerEnabled: false, maxFileSize: 10, maxSubmissionVersions: 5,
   });
   const [configLoaded, setConfigLoaded] = useState(false);
   const [competitions, setCompetitions] = useState<any[]>([]);
@@ -42,6 +42,9 @@ export default function AdminPage() {
   const [subSearch, setSubSearch] = useState('');
   const [subStatusFilter, setSubStatusFilter] = useState<'all' | 'pending' | 'graded'>('all');
   const [expandedComps, setExpandedComps] = useState<Set<string>>(new Set());
+  // 批量操作
+  const [selectedSubs, setSelectedSubs] = useState<Set<string>>(new Set());
+  const [batchBusy, setBatchBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [editingUser, setEditingUser] = useState<any>(null);
   const [userForm, setUserForm] = useState({ name: '', email: '', role: '', school: '', studentId: '', phone: '' });
@@ -752,6 +755,14 @@ export default function AdminPage() {
                               {pendingCount} 待评
                             </span>
                           )}
+                          <a
+                            href={`/api/competitions/${compId}/export`}
+                            onClick={(e) => e.stopPropagation()}
+                            title="打包导出该赛题所有最新提交"
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium bg-gray-900 text-white hover:bg-gray-800 transition"
+                          >
+                            <Download className="w-3 h-3" /> ZIP
+                          </a>
                           {isExpanded ? <ChevronUp className="w-5 h-5 text-gray-400" /> : <ChevronDown className="w-5 h-5 text-gray-400" />}
                         </div>
                       </button>
@@ -760,9 +771,21 @@ export default function AdminPage() {
                       {isExpanded && (
                         <div className="px-4 pb-4 pt-1 space-y-3 border-t border-gray-100 bg-gray-50/30">
                           {subs.map((sub: any) => (
-                <div key={sub.id} className="bg-white rounded-xl border border-gray-200 p-4 sm:p-5">
+                <div key={sub.id} className={`bg-white rounded-xl border p-4 sm:p-5 transition ${selectedSubs.has(sub.id) ? 'border-blue-400 ring-1 ring-blue-200' : 'border-gray-200'}`}>
                   <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3 mb-2">
-                    <div className="min-w-0">
+                    <div className="min-w-0 flex items-start gap-2">
+                      <input
+                        type="checkbox"
+                        checked={selectedSubs.has(sub.id)}
+                        onChange={(e) => {
+                          const next = new Set(selectedSubs);
+                          if (e.target.checked) next.add(sub.id); else next.delete(sub.id);
+                          setSelectedSubs(next);
+                        }}
+                        className="mt-1.5 w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 flex-shrink-0"
+                        title="选中以批量操作"
+                      />
+                      <div className="min-w-0">
                       <h3 className="font-semibold text-gray-900">{sub.competition?.title}</h3>
                       <p className="text-sm text-gray-500">
                         提交者: {sub.user?.name} ({sub.user?.email}) {sub.user?.school && `| ${sub.user.school}`}
@@ -788,6 +811,7 @@ export default function AdminPage() {
                         return null;
                       })()}
                       <p className="text-xs text-gray-400 mt-1">提交时间: {formatDate(sub.createdAt)}</p>
+                      </div>
                     </div>
                     <div className="flex flex-col items-start lg:items-end gap-2">
                       <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(sub.status)}`}>
@@ -1473,6 +1497,124 @@ export default function AdminPage() {
           setMessage={setMessage}
         />
       )}
+
+      {/* ===== 浮动批量操作栏 ===== */}
+      {tab === 'submissions' && selectedSubs.size > 0 && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 bg-white border border-gray-200 shadow-2xl rounded-2xl px-4 py-3 flex flex-wrap items-center gap-2 max-w-[95vw]">
+          <span className="text-sm font-medium text-gray-700 mr-2">已选 {selectedSubs.size} 项</span>
+          <button
+            onClick={() => setSelectedSubs(new Set())}
+            className="px-2.5 py-1 text-xs text-gray-500 hover:text-gray-700"
+            disabled={batchBusy}
+          >清空</button>
+          <div className="w-px h-5 bg-gray-200" />
+          <button
+            disabled={batchBusy}
+            onClick={async () => {
+              const s = prompt('批量打分：请输入分数（0-100）。留空取消。');
+              if (!s || s.trim() === '') return;
+              const score = Number(s);
+              if (!isFinite(score) || score < 0 || score > 100) { alert('分数无效'); return; }
+              const feedback = prompt('可选评语（留空跳过）：') || undefined;
+              setBatchBusy(true);
+              try {
+                const res = await fetch('/api/submissions/batch', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ ids: Array.from(selectedSubs), action: 'grade', payload: { score, feedback } }),
+                });
+                const data = await res.json();
+                if (res.ok) {
+                  setMessage(`已批量评分 ${data.count} 条`);
+                  setSelectedSubs(new Set());
+                  await loadSubmissions();
+                } else setMessage(data.error || '批量操作失败');
+              } catch { setMessage('批量操作失败'); }
+              setBatchBusy(false);
+            }}
+            className="px-3 py-1.5 text-xs font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-500 disabled:opacity-50 transition"
+          >批量评分</button>
+          <select
+            disabled={batchBusy}
+            onChange={async (e) => {
+              const v = e.target.value;
+              if (!v) return;
+              e.currentTarget.value = '';
+              const award = v === 'none' ? null : v;
+              if (!confirm(`确定将 ${selectedSubs.size} 条提交的奖项设置为：${award || '清除'}？`)) return;
+              setBatchBusy(true);
+              try {
+                const res = await fetch('/api/submissions/batch', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ ids: Array.from(selectedSubs), action: 'award', payload: { award } }),
+                });
+                const data = await res.json();
+                if (res.ok) {
+                  setMessage(`已批量设置奖项 ${data.count} 条`);
+                  setSelectedSubs(new Set());
+                  await loadSubmissions();
+                } else setMessage(data.error || '批量操作失败');
+              } catch { setMessage('批量操作失败'); }
+              setBatchBusy(false);
+            }}
+            className="px-2 py-1.5 text-xs bg-amber-50 text-amber-700 rounded-lg hover:bg-amber-100 disabled:opacity-50 transition"
+            defaultValue=""
+          >
+            <option value="">批量授奖…</option>
+            <option value="special">特等奖</option>
+            <option value="first">一等奖</option>
+            <option value="second">二等奖</option>
+            <option value="third">三等奖</option>
+            <option value="excellent">优秀奖</option>
+            <option value="none">清除奖项</option>
+          </select>
+          <button
+            disabled={batchBusy}
+            onClick={async () => {
+              if (!confirm(`确定批量公示 ${selectedSubs.size} 条？`)) return;
+              setBatchBusy(true);
+              try {
+                const res = await fetch('/api/submissions/batch', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ ids: Array.from(selectedSubs), action: 'showcase', payload: { showcased: true } }),
+                });
+                const data = await res.json();
+                if (res.ok) {
+                  setMessage(`已公示 ${data.count} 条`);
+                  setSelectedSubs(new Set());
+                  await loadSubmissions();
+                } else setMessage(data.error || '操作失败');
+              } catch { setMessage('操作失败'); }
+              setBatchBusy(false);
+            }}
+            className="px-3 py-1.5 text-xs font-medium bg-purple-600 text-white rounded-lg hover:bg-purple-500 disabled:opacity-50 transition"
+          >批量公示</button>
+          <button
+            disabled={batchBusy}
+            onClick={async () => {
+              if (!confirm(`确定要删除 ${selectedSubs.size} 条提交？此操作不可逆`)) return;
+              setBatchBusy(true);
+              try {
+                const res = await fetch('/api/submissions/batch', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ ids: Array.from(selectedSubs), action: 'delete' }),
+                });
+                const data = await res.json();
+                if (res.ok) {
+                  setMessage(`已删除 ${data.count} 条`);
+                  setSelectedSubs(new Set());
+                  await loadSubmissions();
+                } else setMessage(data.error || '删除失败');
+              } catch { setMessage('删除失败'); }
+              setBatchBusy(false);
+            }}
+            className="px-3 py-1.5 text-xs font-medium bg-red-600 text-white rounded-lg hover:bg-red-500 disabled:opacity-50 transition"
+          >批量删除</button>
+        </div>
+      )}
     </div>
   );
 }
@@ -1680,6 +1822,7 @@ function SiteSettingsPanel({ form, setForm, loaded, setLoaded, setMessage }: {
             bannerText: data.bannerText || '',
             bannerEnabled: data.bannerEnabled || false,
             maxFileSize: data.maxFileSize || 10,
+            maxSubmissionVersions: data.maxSubmissionVersions || 5,
           });
         }
         setLoaded(true);
@@ -1897,6 +2040,22 @@ function SiteSettingsPanel({ form, setForm, loaded, setLoaded, setMessage }: {
             </div>
           </div>
           <p className="text-xs text-gray-400 mt-2">适用于赛题附件和参赛提交文件，建议设置为 10~50 MB</p>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">重交版本上限（份/赛题/用户）</label>
+          <div className="flex items-center gap-4">
+            <input type="range" min="1" max="20" value={form.maxSubmissionVersions || 5}
+              onChange={e => setForm({ ...form, maxSubmissionVersions: parseInt(e.target.value) })}
+              className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer" />
+            <div className="flex items-center gap-1">
+              <input type="number" min="1" max="20" value={form.maxSubmissionVersions || 5}
+                onChange={e => setForm({ ...form, maxSubmissionVersions: Math.max(1, Math.min(20, parseInt(e.target.value) || 5)) })}
+                className="w-20 px-2 py-1.5 border border-gray-300 rounded-lg text-sm text-center" />
+              <span className="text-sm text-gray-500">份</span>
+            </div>
+          </div>
+          <p className="text-xs text-gray-400 mt-2">用户截止前可重交，超出上限会自动删除最旧版本（含文件）。建议 3~10 份</p>
         </div>
       </div>
 

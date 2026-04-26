@@ -25,6 +25,7 @@ export async function GET() {
       bannerText: null,
       bannerEnabled: false,
       maxFileSize: 10,
+      maxSubmissionVersions: 5,
     });
   }
 }
@@ -38,7 +39,7 @@ export async function PUT(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { siteName, siteDesc, heroTitle, heroDesc, footerText, primaryColor, secondaryColor, gradientEnabled, gradientAngle, logoUrl, bannerText, bannerEnabled, maxFileSize } = body;
+    const { siteName, siteDesc, heroTitle, heroDesc, footerText, primaryColor, secondaryColor, gradientEnabled, gradientAngle, logoUrl, bannerText, bannerEnabled, maxFileSize, maxSubmissionVersions } = body;
 
     const update: any = {};
     if (siteName) update.siteName = siteName;
@@ -57,6 +58,7 @@ export async function PUT(request: NextRequest) {
     if (bannerText !== undefined) update.bannerText = bannerText;
     if (bannerEnabled !== undefined) update.bannerEnabled = bannerEnabled;
     if (maxFileSize !== undefined) update.maxFileSize = maxFileSize;
+    if (maxSubmissionVersions !== undefined) update.maxSubmissionVersions = Math.max(1, Math.min(20, Number(maxSubmissionVersions) || 5));
 
     const config = await (prisma.siteConfig as any).upsert({
       where: { id: 'default' },
@@ -76,6 +78,7 @@ export async function PUT(request: NextRequest) {
         bannerText: bannerText || null,
         bannerEnabled: bannerEnabled || false,
         maxFileSize: maxFileSize || 10,
+        maxSubmissionVersions: Math.max(1, Math.min(20, Number(maxSubmissionVersions) || 5)),
       },
     });
 

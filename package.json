@@ -17,6 +17,8 @@
   },
   "dependencies": {
     "@prisma/client": "^5.15.0",
+    "@types/archiver": "^7.0.0",
+    "archiver": "^7.0.1",
     "bcryptjs": "^2.4.3",
     "clsx": "^2.1.0",
     "isomorphic-dompurify": "^3.10.0",

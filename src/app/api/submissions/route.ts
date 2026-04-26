@@ -2,15 +2,36 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
-import { writeFile, mkdir } from 'fs/promises';
+import { writeFile, mkdir, unlink } from 'fs/promises';
 import path from 'path';
 import { validateUpload } from '@/lib/fileType';
 
-async function getMaxFileSize(): Promise<number> {
+async function getSiteConfig() {
   try {
-    const config = await prisma.siteConfig.findUnique({ where: { id: 'default' } });
-    return (config?.maxFileSize || 10) * 1024 * 1024;
-  } catch { return 10 * 1024 * 1024; }
+    return await prisma.siteConfig.findUnique({ where: { id: 'default' } });
+  } catch { return null; }
+}
+
+async function getMaxFileSize(): Promise<number> {
+  const config = await getSiteConfig();
+  return ((config as any)?.maxFileSize || 10) * 1024 * 1024;
+}
+
+async function getMaxVersions(): Promise<number> {
+  const config = await getSiteConfig();
+  const v = (config as any)?.maxSubmissionVersions ?? 5;
+  return Math.max(1, Math.min(20, v));
+}
+
+// 安全删除上传目录下的文件，避免路径穿越
+async function safeUnlinkUpload(relPath: string | null | undefined) {
+  if (!relPath) return;
+  try {
+    const uploadsRoot = path.join(process.cwd(), 'public', 'uploads');
+    const abs = path.normalize(path.join(process.cwd(), 'public', relPath));
+    if (!abs.startsWith(uploadsRoot)) return;
+    await unlink(abs);
+  } catch {}
 }
 
 function safeExt(name: string) {
@@ -27,13 +48,21 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url);
     const competitionId = searchParams.get('competitionId');
+    const includeVersions = searchParams.get('versions') === '1';
+    const userIdFilter = searchParams.get('userId') || undefined;
 
     const where: any = {};
     if (session.user.role !== 'admin') {
       where.userId = session.user.id;
+    } else if (userIdFilter) {
+      where.userId = userIdFilter;
     }
     if (competitionId) {
       where.competitionId = competitionId;
+    }
+    // 默认仅展示最新版本；admin 显式 versions=1 才返回历史版本
+    if (!(includeVersions && session.user.role === 'admin')) {
+      where.isLatest = true;
     }
 
     const submissions = await prisma.submission.findMany({
@@ -136,18 +165,74 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const submission = await prisma.submission.create({
-      data: {
-        fileName: file.name,
-        filePath: `/uploads/${fileName}`,
-        extraFiles: extraFilesData.length > 0 ? JSON.stringify(extraFilesData) : null,
-        teamName: teamName || null,
-        teamMembers: teamMembers || null,
-        notes: notes || null,
-        userId: session.user.id,
-        competitionId,
-      },
+    // —— 重交：标记旧的 isLatest 为 false，记录 parentId 链 —— //
+    const previousLatest = await prisma.submission.findFirst({
+      where: { userId: session.user.id, competitionId, isLatest: true },
+      orderBy: { createdAt: 'desc' },
     });
+
+    const submission = await prisma.$transaction(async (tx) => {
+      if (previousLatest) {
+        await tx.submission.update({
+          where: { id: previousLatest.id },
+          data: { isLatest: false },
+        });
+      }
+      return tx.submission.create({
+        data: {
+          fileName: file.name,
+          filePath: `/uploads/${fileName}`,
+          extraFiles: extraFilesData.length > 0 ? JSON.stringify(extraFilesData) : null,
+          teamName: teamName || null,
+          teamMembers: teamMembers || null,
+          notes: notes || null,
+          userId: session.user.id,
+          competitionId,
+          parentId: previousLatest?.id ?? null,
+          isLatest: true,
+        } as any,
+      });
+    });
+
+    // —— 版本上限淘汰：超过 maxVersions 时删除最旧版本（含文件） —— //
+    try {
+      const maxV = await getMaxVersions();
+      const versions = await prisma.submission.findMany({
+        where: { userId: session.user.id, competitionId },
+        orderBy: { createdAt: 'asc' },
+      });
+      const excess = versions.length - maxV;
+      if (excess > 0) {
+        const toDelete = versions.slice(0, excess);
+        for (const v of toDelete) {
+          await safeUnlinkUpload(v.filePath);
+          if (v.extraFiles) {
+            try {
+              const arr = JSON.parse(v.extraFiles) as { path: string }[];
+              for (const ef of arr) await safeUnlinkUpload(ef.path);
+            } catch {}
+          }
+          await prisma.submission.delete({ where: { id: v.id } }).catch(() => {});
+        }
+      }
+    } catch (e) {
+      console.warn('版本淘汰清理出错（已忽略）:', e);
+    }
+
+    // —— 用户站内通知 —— //
+    if (previousLatest) {
+      try {
+        await (prisma as any).notification.create({
+          data: {
+            userId: session.user.id,
+            type: 'system',
+            title: '已重新提交',
+            content: `你已重新提交《${competition.title}》，旧版本已归档。`,
+            link: `/competitions/${competitionId}`,
+          },
+        });
+      } catch {}
+    }
 
     return NextResponse.json(submission);
   } catch (error) {
