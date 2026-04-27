@@ -513,6 +513,7 @@ export default function AdminPage() {
     { key: 'cleanup' as const, label: '数据清理', icon: Sparkles, count: 0 },
     { key: 'notifications' as const, label: '通知发送', icon: Bell, count: 0 },
     { key: 'settings' as const, label: '站点设置', icon: Settings, count: 0 },
+    { key: 'guide' as const, label: '使用说明', icon: HelpCircle, count: 0 },
   ];
 
   return (
