@@ -47,6 +47,8 @@ export async function POST(request: NextRequest) {
     const startTime = formData.get('startTime') as string;
     const endTime = formData.get('endTime') as string;
     const status = (formData.get('status') as string) || 'draft';
+    const teamMaxMembersRaw = formData.get('teamMaxMembers');
+    const teamMaxMembers = Math.max(1, Math.min(20, parseInt(String(teamMaxMembersRaw ?? '5'), 10) || 5));
     const file = formData.get('attachment') as File | null;
     const extraFiles = formData.getAll('extraAttachments') as File[];
 
@@ -98,6 +100,7 @@ export async function POST(request: NextRequest) {
         startTime: new Date(startTime),
         endTime: new Date(endTime),
         status,
+        teamMaxMembers,
         attachmentName,
         attachmentPath,
         attachments: attachments.length > 0 ? JSON.stringify(attachments) : null,

@@ -71,6 +71,7 @@ export async function PUT(
     const startTime = formData.get('startTime') as string;
     const endTime = formData.get('endTime') as string;
     const statusVal = formData.get('status') as string;
+    const teamMaxMembersRaw = formData.get('teamMaxMembers');
     const file = formData.get('attachment') as File | null;
     const removeAttachment = formData.get('removeAttachment') === 'true';
     const extraFiles = formData.getAll('extraAttachments') as File[];
@@ -83,6 +84,12 @@ export async function PUT(
     if (startTime) data.startTime = new Date(startTime);
     if (endTime) data.endTime = new Date(endTime);
     if (statusVal) data.status = statusVal;
+    if (teamMaxMembersRaw !== null && teamMaxMembersRaw !== undefined) {
+      const parsed = parseInt(String(teamMaxMembersRaw), 10);
+      if (!Number.isNaN(parsed)) {
+        data.teamMaxMembers = Math.max(1, Math.min(20, parsed));
+      }
+    }
 
     const uploadDir = path.join(process.cwd(), 'public', 'uploads', 'competitions');
     await mkdir(uploadDir, { recursive: true });
