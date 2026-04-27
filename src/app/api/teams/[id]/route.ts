@@ -99,16 +99,9 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     return NextResponse.json({ ok: true });
   }
 
-  // 修改信息
+  // 修改信息（团队人数上限由赛题统一配置，此处只允许改名）
   const data: any = {};
   if (typeof body.name === 'string' && body.name.trim()) data.name = body.name.trim().slice(0, 50);
-  if (typeof body.maxMembers === 'number') {
-    const maxMembers = Math.max(1, Math.min(20, body.maxMembers));
-    if (maxMembers < team.members.length) {
-      return NextResponse.json({ error: `人数上限不能小于当前成员数 ${team.members.length}` }, { status: 400 });
-    }
-    data.maxMembers = maxMembers;
-  }
   if (Object.keys(data).length === 0) return NextResponse.json({ error: '无可更新字段' }, { status: 400 });
 
   const updated = await (prisma as any).team.update({ where: { id: team.id }, data });

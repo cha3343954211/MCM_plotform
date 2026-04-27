@@ -56,6 +56,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '请填写所有必填字段' }, { status: 400 });
     }
 
+    const startDate = new Date(startTime);
+    const endDate = new Date(endTime);
+    if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
+      return NextResponse.json({ error: '开始或截止时间格式不正确' }, { status: 400 });
+    }
+    if (endDate.getTime() <= startDate.getTime()) {
+      return NextResponse.json({ error: '截止时间必须晚于开始时间' }, { status: 400 });
+    }
+
     let attachmentName: string | null = null;
     let attachmentPath: string | null = null;
 
@@ -97,8 +106,8 @@ export async function POST(request: NextRequest) {
         title,
         description,
         content,
-        startTime: new Date(startTime),
-        endTime: new Date(endTime),
+        startTime: startDate,
+        endTime: endDate,
         status,
         teamMaxMembers,
         attachmentName,

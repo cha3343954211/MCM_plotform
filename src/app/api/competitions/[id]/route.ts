@@ -81,13 +81,26 @@ export async function PUT(
     if (title) data.title = title;
     if (description) data.description = description;
     if (content) data.content = content;
-    if (startTime) data.startTime = new Date(startTime);
-    if (endTime) data.endTime = new Date(endTime);
+    if (startTime) {
+      const d = new Date(startTime);
+      if (Number.isNaN(d.getTime())) return NextResponse.json({ error: '开始时间格式不正确' }, { status: 400 });
+      data.startTime = d;
+    }
+    if (endTime) {
+      const d = new Date(endTime);
+      if (Number.isNaN(d.getTime())) return NextResponse.json({ error: '截止时间格式不正确' }, { status: 400 });
+      data.endTime = d;
+    }
+    if (data.startTime && data.endTime && data.endTime.getTime() <= data.startTime.getTime()) {
+      return NextResponse.json({ error: '截止时间必须晚于开始时间' }, { status: 400 });
+    }
     if (statusVal) data.status = statusVal;
+    let nextTeamMaxMembers: number | null = null;
     if (teamMaxMembersRaw !== null && teamMaxMembersRaw !== undefined) {
       const parsed = parseInt(String(teamMaxMembersRaw), 10);
       if (!Number.isNaN(parsed)) {
-        data.teamMaxMembers = Math.max(1, Math.min(20, parsed));
+        nextTeamMaxMembers = Math.max(1, Math.min(20, parsed));
+        data.teamMaxMembers = nextTeamMaxMembers;
       }
     }
 
@@ -143,6 +156,22 @@ export async function PUT(
       where: { id: params.id },
       data,
     });
+
+    // 赛题人数上限调整后，同步到当前赛题下的团队，避免降到低于现有成员数
+    if (nextTeamMaxMembers !== null) {
+      try {
+        const teams = await (prisma as any).team.findMany({
+          where: { competitionId: params.id },
+          select: { id: true, _count: { select: { members: true } } },
+        });
+        await Promise.all(teams.map((t: any) => {
+          const target = Math.max(nextTeamMaxMembers!, t._count?.members || 0);
+          return (prisma as any).team.update({ where: { id: t.id }, data: { maxMembers: target } });
+        }));
+      } catch (err) {
+        console.error('同步团队人数上限失败:', err);
+      }
+    }
 
     return NextResponse.json(competition);
   } catch (error) {

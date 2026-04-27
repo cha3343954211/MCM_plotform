@@ -86,6 +86,7 @@ export async function GET(request: NextRequest) {
             include: { user: { select: { id: true, name: true, email: true, school: true } } },
           },
           submissions: {
+            where: { isLatest: true },
             select: {
               id: true,
               fileName: true,
