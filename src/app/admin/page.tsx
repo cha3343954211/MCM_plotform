@@ -1769,7 +1769,7 @@ export default function AdminPage() {
       )}
 
       {/* ===== 管理员使用说明 ===== */}
-      {tab === 'guide' && <AdminGuidePanel />}
+      {tab === 'guide' && <AdminGuidePanel onMessage={setMessage} />}
 
       {/* ===== 总览 ===== */}
       {tab === 'dashboard' && <DashboardPanel onJump={(t: string) => setTab(t as any)} />}
@@ -2373,78 +2373,105 @@ function SiteSettingsPanel({ form, setForm, loaded, setLoaded, setMessage }: {
   );
 }
 
-function AdminGuidePanel() {
-  const groups = [
-    {
-      title: '赛题发布与配置',
-      items: [
-        '在赛题管理中创建赛题，填写标题、简介、详情、开始/截止时间和状态。',
-        '发布赛题时设置每队人数上限，用户创建团队会自动使用该配置。',
-        '可上传主附件和多个附加附件，编辑时可保留或移除原附件。',
-      ],
-    },
-    {
-      title: '提交评审与获奖公示',
-      items: [
-        '提交评审中按赛题查看用户或团队提交，支持评分、评语和奖项设置。',
-        '管理员可下载主文件和附件，评委可按权限进入评委工作台评分。',
-        '设置获奖和公示后，用户可在我的提交中查看成绩并打印/保存证书。',
-      ],
-    },
-    {
-      title: '团队与用户管理',
-      items: [
-        '团队管理按赛题分组展示，可查看成员、邀请码和提交记录。',
-        '用户管理支持修改资料、角色、重置密码和删除异常账号。',
-        '处理用户问题前优先确认其登录邮箱、所属赛题和团队状态。',
-      ],
-    },
-    {
-      title: '公告、通知与站点设置',
-      items: [
-        '公告管理用于发布面向全站用户的通知，可置顶或下架。',
-        '通知发送支持全体用户或指定用户发送站内通知。',
-        '站点设置可调整站点名称、首页文案、主题色、文件大小和提交版本上限。',
-      ],
-    },
-    {
-      title: '稳定性与运维建议',
-      items: [
-        '涉及数据库结构更新后，服务器需执行 prisma generate 和 prisma db push。',
-        '大文件上传异常时检查站点文件大小限制、服务器磁盘空间和上传目录权限。',
-        '定期查看文件存储和登录日志，清理无效文件与过旧日志。',
-      ],
-    },
-  ];
+function AdminGuidePanel({ onMessage }: { onMessage: (m: string) => void }) {
+  const [docs, setDocs] = useState<{ user: { content: string; updatedAt: string | null }; changelog: { content: string; updatedAt: string | null } }>({
+    user: { content: '', updatedAt: null },
+    changelog: { content: '', updatedAt: null },
+  });
+  const [loaded, setLoaded] = useState(false);
+  const [saving, setSaving] = useState<'user' | 'changelog' | null>(null);
+
+  useEffect(() => {
+    fetch('/api/guide', { cache: 'no-store' })
+      .then((r) => r.ok ? r.json() : null)
+      .then((d) => { if (d) setDocs(d); })
+      .finally(() => setLoaded(true));
+  }, []);
+
+  const save = async (key: 'user' | 'changelog') => {
+    setSaving(key);
+    try {
+      const res = await fetch('/api/guide', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key, content: docs[key].content }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        onMessage(key === 'user' ? '用户使用说明已保存' : '版本更新日志已保存');
+        setDocs((prev) => ({ ...prev, [key]: { ...prev[key], updatedAt: data.updatedAt || new Date().toISOString() } }));
+      } else {
+        onMessage(data.error || '保存失败');
+      }
+    } catch {
+      onMessage('保存失败');
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  if (!loaded) return <div className="text-sm text-gray-400">加载中...</div>;
 
   return (
     <div className="space-y-6">
-      <div className="glass-card rounded-3xl p-8">
+      <div className="glass-card rounded-3xl p-6">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-2xl bg-blue-50 flex items-center justify-center">
             <HelpCircle className="w-5 h-5 text-blue-600" />
           </div>
           <div>
-            <h2 className="text-xl font-semibold text-gray-900">管理员平台使用说明</h2>
-            <p className="text-sm text-gray-400 mt-1">面向平台管理员的核心功能、操作路径与稳定性建议</p>
+            <h2 className="text-xl font-semibold text-gray-900">使用说明编辑</h2>
+            <p className="text-sm text-gray-400 mt-1">编辑用户端 /guide 页面展示的使用说明与版本更新日志，留空将显示内置默认内容</p>
           </div>
         </div>
       </div>
 
-      <div className="grid md:grid-cols-2 gap-4">
-        {groups.map((group) => (
-          <div key={group.title} className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm">
-            <h3 className="font-semibold text-gray-900 mb-3">{group.title}</h3>
-            <ul className="space-y-2">
-              {group.items.map((item) => (
-                <li key={item} className="flex gap-2 text-sm text-gray-500 leading-6">
-                  <CheckCircle2 className="w-4 h-4 text-green-500 mt-1 flex-shrink-0" />
-                  <span>{item}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        ))}
+      <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm space-y-3">
+        <div className="flex items-center justify-between">
+          <h3 className="font-semibold text-gray-900">用户使用说明</h3>
+          {docs.user.updatedAt && (
+            <span className="text-xs text-gray-400">更新于 {new Date(docs.user.updatedAt).toLocaleString()}</span>
+          )}
+        </div>
+        <MarkdownEditor
+          value={docs.user.content}
+          onChange={(v) => setDocs((prev) => ({ ...prev, user: { ...prev.user, content: v } }))}
+          rows={14}
+          placeholder="使用 Markdown 编写用户端使用说明，留空将展示默认内容"
+        />
+        <div className="flex justify-end">
+          <button
+            onClick={() => save('user')}
+            disabled={saving === 'user'}
+            className="inline-flex items-center gap-1 px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-500 disabled:opacity-50"
+          >
+            <Save className="w-4 h-4" /> {saving === 'user' ? '保存中...' : '保存使用说明'}
+          </button>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm space-y-3">
+        <div className="flex items-center justify-between">
+          <h3 className="font-semibold text-gray-900">版本更新日志</h3>
+          {docs.changelog.updatedAt && (
+            <span className="text-xs text-gray-400">更新于 {new Date(docs.changelog.updatedAt).toLocaleString()}</span>
+          )}
+        </div>
+        <MarkdownEditor
+          value={docs.changelog.content}
+          onChange={(v) => setDocs((prev) => ({ ...prev, changelog: { ...prev.changelog, content: v } }))}
+          rows={14}
+          placeholder={'示例：\n## v1.2.0 - 2025-04-27\n- 新增使用说明页面\n- 优化提交流程'}
+        />
+        <div className="flex justify-end">
+          <button
+            onClick={() => save('changelog')}
+            disabled={saving === 'changelog'}
+            className="inline-flex items-center gap-1 px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-500 disabled:opacity-50"
+          >
+            <Save className="w-4 h-4" /> {saving === 'changelog' ? '保存中...' : '保存版本日志'}
+          </button>
+        </div>
       </div>
     </div>
   );

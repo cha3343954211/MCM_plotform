@@ -77,6 +77,12 @@ model SiteConfig {
   updatedAt DateTime @updatedAt
 }
 
+model GuideDoc {
+  key       String   @id // "user" | "changelog"
+  content   String   // markdown 正文
+  updatedAt DateTime @updatedAt
+}
+
 model LoginLog {
   id        String   @id @default(cuid())
   userId    String?

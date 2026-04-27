@@ -1,10 +1,12 @@
 'use client';
 
 import Link from 'next/link';
-import { BookOpen, Users, Upload, Award, Bell, ShieldCheck, ArrowRight, HelpCircle } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { BookOpen, Users, Upload, Award, Bell, ShieldCheck, ArrowRight, HelpCircle, History } from 'lucide-react';
 import { useSiteConfig } from '@/components/SiteConfigProvider';
+import MarkdownRenderer from '@/components/MarkdownRenderer';
 
-const sections = [
+const defaultSections = [
   {
     title: '1. 注册与完善资料',
     icon: ShieldCheck,
@@ -37,8 +39,24 @@ const sections = [
   },
 ];
 
+type GuideKey = 'user' | 'changelog';
+type GuideMap = Record<GuideKey, { content: string; updatedAt: string | null }>;
+
 export default function UserGuidePage() {
   const { config } = useSiteConfig();
+  const [tab, setTab] = useState<GuideKey>('user');
+  const [docs, setDocs] = useState<GuideMap>({ user: { content: '', updatedAt: null }, changelog: { content: '', updatedAt: null } });
+
+  useEffect(() => {
+    fetch('/api/guide', { cache: 'no-store' })
+      .then((r) => r.ok ? r.json() : null)
+      .then((d) => { if (d) setDocs(d); })
+      .catch(() => {});
+  }, []);
+
+  const userContent = docs.user?.content?.trim();
+  const changelogContent = docs.changelog?.content?.trim();
+  const updated = docs[tab]?.updatedAt;
 
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-12 animate-fade-in-up">
@@ -48,10 +66,32 @@ export default function UserGuidePage() {
             <HelpCircle className="w-6 h-6" style={{ color: config.primaryColor }} />
           </div>
           <div>
-            <h1 className="text-3xl font-bold text-gray-900 tracking-tight">用户端使用说明</h1>
-            <p className="text-sm text-gray-400 mt-1">从注册、组队、提交到查看成绩的完整操作指南</p>
+            <h1 className="text-3xl font-bold text-gray-900 tracking-tight">使用说明</h1>
+            <p className="text-sm text-gray-400 mt-1">从注册、组队、提交到查看成绩的完整指南，含版本更新日志</p>
           </div>
         </div>
+
+        <div className="flex flex-wrap gap-2 mt-4">
+          <button
+            onClick={() => setTab('user')}
+            className={`inline-flex items-center gap-1 px-4 py-2 rounded-2xl text-sm font-medium transition ${tab === 'user' ? 'text-white' : 'bg-black/[0.04] text-gray-600 hover:bg-black/[0.06]'}`}
+            style={tab === 'user' ? { background: `linear-gradient(135deg, ${config.primaryColor}, ${config.primaryColor}cc)` } : undefined}
+          >
+            <BookOpen className="w-4 h-4" /> 用户使用说明
+          </button>
+          <button
+            onClick={() => setTab('changelog')}
+            className={`inline-flex items-center gap-1 px-4 py-2 rounded-2xl text-sm font-medium transition ${tab === 'changelog' ? 'text-white' : 'bg-black/[0.04] text-gray-600 hover:bg-black/[0.06]'}`}
+            style={tab === 'changelog' ? { background: `linear-gradient(135deg, ${config.primaryColor}, ${config.primaryColor}cc)` } : undefined}
+          >
+            <History className="w-4 h-4" /> 版本更新日志
+          </button>
+        </div>
+
+        {updated && (
+          <p className="text-xs text-gray-400 mt-3">最近更新于：{new Date(updated).toLocaleString()}</p>
+        )}
+
         <div className="flex flex-wrap gap-2 mt-6">
           <Link href="/competitions" className="inline-flex items-center gap-1 px-4 py-2 rounded-2xl text-sm font-medium text-white apple-btn" style={{ background: `linear-gradient(135deg, ${config.primaryColor}, ${config.primaryColor}cc)` }}>
             查看赛题 <ArrowRight className="w-4 h-4" />
@@ -65,24 +105,45 @@ export default function UserGuidePage() {
         </div>
       </div>
 
-      <div className="grid md:grid-cols-2 gap-4">
-        {sections.map((section) => (
-          <div key={section.title} className="glass-card rounded-3xl p-6">
-            <div className="flex items-center gap-2 mb-4">
-              <section.icon className="w-5 h-5" style={{ color: config.primaryColor }} />
-              <h2 className="font-semibold text-gray-900">{section.title}</h2>
-            </div>
-            <ul className="space-y-2">
-              {section.items.map((item) => (
-                <li key={item} className="flex gap-2 text-sm text-gray-500 leading-6">
-                  <span className="mt-2 w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: config.primaryColor }} />
-                  <span>{item}</span>
-                </li>
-              ))}
-            </ul>
+      {tab === 'user' && (
+        userContent ? (
+          <div className="glass-card rounded-3xl p-8">
+            <MarkdownRenderer content={userContent} />
           </div>
-        ))}
-      </div>
+        ) : (
+          <div className="grid md:grid-cols-2 gap-4">
+            {defaultSections.map((section) => (
+              <div key={section.title} className="glass-card rounded-3xl p-6">
+                <div className="flex items-center gap-2 mb-4">
+                  <section.icon className="w-5 h-5" style={{ color: config.primaryColor }} />
+                  <h2 className="font-semibold text-gray-900">{section.title}</h2>
+                </div>
+                <ul className="space-y-2">
+                  {section.items.map((item) => (
+                    <li key={item} className="flex gap-2 text-sm text-gray-500 leading-6">
+                      <span className="mt-2 w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: config.primaryColor }} />
+                      <span>{item}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+        )
+      )}
+
+      {tab === 'changelog' && (
+        <div className="glass-card rounded-3xl p-8">
+          {changelogContent ? (
+            <MarkdownRenderer content={changelogContent} />
+          ) : (
+            <div className="text-center py-12">
+              <History className="w-10 h-10 mx-auto mb-3 text-gray-300" />
+              <p className="text-sm text-gray-400">管理员暂未发布版本更新日志</p>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
