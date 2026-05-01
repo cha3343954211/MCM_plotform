@@ -2,8 +2,98 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Download, ArrowLeft, Loader2, Award } from 'lucide-react';
+import { Download, ArrowLeft, Loader2, Award, Crown, Medal, Star, Trophy, Sparkles } from 'lucide-react';
 import { getAwardLabel } from '@/lib/utils';
+
+interface CertTheme {
+  tier: number; // 1=excellent ... 5=special
+  primary: string; // 主色
+  secondary: string; // 副色 / 渐变
+  accent: string; // 点缀色
+  background: string; // 内层底色（淡）
+  ribbon: boolean; // 顶部缎带
+  englishLabel: string;
+  badgeIcon: typeof Crown;
+  sealText: string;
+}
+
+function getCertTheme(award: string, fallbackPrimary: string, fallbackSecondary: string | null): CertTheme {
+  const fb2 = fallbackSecondary || fallbackPrimary;
+  switch (award) {
+    case 'special':
+      return {
+        tier: 5,
+        primary: '#7f1d1d',
+        secondary: '#dc2626',
+        accent: '#f59e0b',
+        background: '#fff7ed',
+        ribbon: true,
+        englishLabel: 'GRAND PRIZE',
+        badgeIcon: Crown,
+        sealText: '至尊',
+      };
+    case 'first':
+      return {
+        tier: 4,
+        primary: '#92400e',
+        secondary: '#d97706',
+        accent: '#fbbf24',
+        background: '#fffbeb',
+        ribbon: true,
+        englishLabel: 'FIRST PRIZE',
+        badgeIcon: Trophy,
+        sealText: '金奖',
+      };
+    case 'second':
+      return {
+        tier: 3,
+        primary: '#334155',
+        secondary: '#64748b',
+        accent: '#94a3b8',
+        background: '#f8fafc',
+        ribbon: false,
+        englishLabel: 'SECOND PRIZE',
+        badgeIcon: Medal,
+        sealText: '银奖',
+      };
+    case 'third':
+      return {
+        tier: 2,
+        primary: '#9a3412',
+        secondary: '#c2410c',
+        accent: '#fb923c',
+        background: '#fff7ed',
+        ribbon: false,
+        englishLabel: 'THIRD PRIZE',
+        badgeIcon: Medal,
+        sealText: '铜奖',
+      };
+    case 'excellent':
+      return {
+        tier: 1,
+        primary: '#0369a1',
+        secondary: '#0ea5e9',
+        accent: '#22d3ee',
+        background: '#f0f9ff',
+        ribbon: false,
+        englishLabel: 'CERTIFICATE OF EXCELLENCE',
+        badgeIcon: Star,
+        sealText: '优秀',
+      };
+    default:
+      return {
+        tier: 1,
+        primary: fallbackPrimary,
+        secondary: fb2,
+        accent: fb2,
+        background: '#ffffff',
+        ribbon: false,
+        englishLabel: 'CERTIFICATE OF ACHIEVEMENT',
+        badgeIcon: Sparkles,
+        sealText: '荣誉',
+      };
+  }
+}
 
 type Awardee =
   | { type: 'user'; name: string; school: string; studentId: string }
@@ -110,8 +200,11 @@ export default function CertificatePage() {
     );
   }
 
-  const primary = data.primaryColor;
-  const secondary = data.secondaryColor || data.primaryColor;
+  const theme = getCertTheme(data.award, data.primaryColor, data.secondaryColor);
+  const primary = theme.primary;
+  const secondary = theme.secondary;
+  const accent = theme.accent;
+  const BadgeIcon = theme.badgeIcon;
   const awardLabel = getAwardLabel(data.award) || data.award;
   const isTeam = data.awardee.type === 'team';
 
@@ -139,24 +232,47 @@ export default function CertificatePage() {
       <div className="overflow-x-auto pb-6">
         <div
           ref={certRef}
-          className="relative mx-auto bg-white"
+          className="relative mx-auto overflow-hidden"
           style={{
             width: '1123px',
             height: '794px',
             boxShadow: '0 20px 60px rgba(0,0,0,0.12)',
             fontFamily: '"Noto Serif SC", "Source Han Serif", "Songti SC", "SimSun", "STSong", serif',
+            background: theme.tier >= 4
+              ? `radial-gradient(ellipse at top, ${primary}10, ${theme.background} 60%)`
+              : theme.background,
           }}
         >
+          {/* 特等奖额外光晕 */}
+          {theme.tier === 5 && (
+            <>
+              <div className="absolute -top-32 -left-32 w-96 h-96 rounded-full" style={{ background: `radial-gradient(circle, ${accent}30, transparent 70%)` }} />
+              <div className="absolute -bottom-32 -right-32 w-96 h-96 rounded-full" style={{ background: `radial-gradient(circle, ${secondary}25, transparent 70%)` }} />
+            </>
+          )}
+
+          {/* 顶部缎带 */}
+          {theme.ribbon && (
+            <div
+              className="absolute top-0 left-1/2 -translate-x-1/2 w-44 h-6"
+              style={{ background: `linear-gradient(135deg, ${primary}, ${secondary})`, clipPath: 'polygon(0 0, 100% 0, 90% 100%, 50% 80%, 10% 100%)' }}
+            />
+          )}
+
           {/* 外描边 */}
           <div
             className="absolute inset-6 rounded-md"
-            style={{ border: `3px solid ${primary}` }}
+            style={{ border: `${theme.tier >= 4 ? 4 : 3}px solid ${primary}` }}
           />
           {/* 内描边 */}
           <div
             className="absolute inset-9 rounded-sm"
             style={{ border: `1px solid ${primary}66` }}
           />
+          {/* 三层描边（特等奖） */}
+          {theme.tier === 5 && (
+            <div className="absolute inset-12 rounded-sm" style={{ border: `1px dashed ${accent}aa` }} />
+          )}
 
           {/* 角落装饰 */}
           {[
@@ -167,19 +283,53 @@ export default function CertificatePage() {
           ].map((pos, i) => (
             <div
               key={i}
-              className="absolute w-12 h-12 rounded-full"
+              className={`absolute rounded-full flex items-center justify-center ${theme.tier >= 4 ? 'w-14 h-14' : 'w-12 h-12'}`}
               style={{
                 ...pos,
                 background: `linear-gradient(135deg, ${primary}, ${secondary})`,
-                opacity: 0.85,
+                opacity: 0.9,
+                boxShadow: theme.tier >= 4 ? `0 0 12px ${accent}88` : 'none',
               }}
-            />
+            >
+              {theme.tier === 5 && <Star className="w-5 h-5 text-white" fill="white" />}
+            </div>
           ))}
+
+          {/* 侧边小星点（特等 / 一等） */}
+          {theme.tier >= 4 && (
+            <>
+              {[120, 220, 574, 674].map((top, idx) => (
+                <Star key={`l${idx}`} className="absolute w-3 h-3" style={{ top, left: 30, color: accent }} fill={accent} />
+              ))}
+              {[120, 220, 574, 674].map((top, idx) => (
+                <Star key={`r${idx}`} className="absolute w-3 h-3" style={{ top, right: 30, color: accent }} fill={accent} />
+              ))}
+            </>
+          )}
+
+          {/* 印章（右下） */}
+          <div
+            className="absolute flex items-center justify-center text-white font-bold tracking-widest"
+            style={{
+              right: 70,
+              bottom: 100,
+              width: 90,
+              height: 90,
+              borderRadius: '50%',
+              border: `3px solid ${primary}`,
+              background: `linear-gradient(135deg, ${primary}cc, ${secondary}cc)`,
+              fontSize: 22,
+              transform: 'rotate(-12deg)',
+              boxShadow: `0 4px 12px ${primary}44`,
+            }}
+          >
+            {theme.sealText}
+          </div>
 
           {/* 内容 */}
           <div className="relative h-full flex flex-col items-center justify-between py-16 px-24 text-center">
             <div>
-              <p className="text-sm tracking-[0.4em] text-gray-400 uppercase">Certificate of Achievement</p>
+              <p className="text-sm tracking-[0.4em] uppercase" style={{ color: `${primary}99` }}>{theme.englishLabel}</p>
               <h1
                 className="mt-3 text-3xl font-bold tracking-wider"
                 style={{ color: primary }}
@@ -189,12 +339,33 @@ export default function CertificatePage() {
             </div>
 
             <div className="flex flex-col items-center gap-4">
-              <h2 className="text-5xl font-extrabold tracking-[0.3em]" style={{ color: primary }}>
+              <div
+                className="flex items-center justify-center rounded-full"
+                style={{
+                  width: theme.tier >= 4 ? 72 : 56,
+                  height: theme.tier >= 4 ? 72 : 56,
+                  background: `linear-gradient(135deg, ${primary}, ${secondary})`,
+                  boxShadow: theme.tier >= 4 ? `0 0 20px ${accent}aa` : `0 4px 12px ${primary}33`,
+                }}
+              >
+                <BadgeIcon className={theme.tier >= 4 ? 'w-9 h-9 text-white' : 'w-7 h-7 text-white'} />
+              </div>
+              <h2
+                className={`font-extrabold tracking-[0.3em] ${theme.tier === 5 ? 'text-6xl' : 'text-5xl'}`}
+                style={{
+                  color: primary,
+                  textShadow: theme.tier >= 4 ? `0 2px 8px ${accent}55` : 'none',
+                }}
+              >
                 获 奖 证 书
               </h2>
               <div
-                className="px-8 py-2 rounded-full text-white text-lg font-semibold tracking-widest"
-                style={{ background: `linear-gradient(135deg, ${primary}, ${secondary})` }}
+                className="px-10 py-2 rounded-full text-white text-xl font-semibold tracking-widest"
+                style={{
+                  background: `linear-gradient(135deg, ${primary}, ${secondary})`,
+                  boxShadow: `0 6px 16px ${primary}55`,
+                  border: theme.tier >= 4 ? `1px solid ${accent}` : 'none',
+                }}
               >
                 {awardLabel}
               </div>
