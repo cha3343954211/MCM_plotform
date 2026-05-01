@@ -49,7 +49,7 @@ export default function AdminPage() {
   const compFileRef = useRef<HTMLInputElement>(null);
   const compExtraFileRef = useRef<HTMLInputElement>(null);
   const [gradingId, setGradingId] = useState<string | null>(null);
-  const [gradeForm, setGradeForm] = useState({ score: '', feedback: '', award: '', showcased: false });
+  const [gradeForm, setGradeForm] = useState({ score: '', feedback: '', award: '', showcased: false, showcaseDownloadable: false });
   const [subSearch, setSubSearch] = useState('');
   const [subStatusFilter, setSubStatusFilter] = useState<'all' | 'pending' | 'graded'>('all');
   const [teamSearch, setTeamSearch] = useState('');
@@ -270,11 +270,11 @@ export default function AdminPage() {
       const res = await fetch(`/api/submissions/${subId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ score: gradeForm.score, feedback: gradeForm.feedback, award: gradeForm.award, showcased: gradeForm.showcased, status: 'graded' }),
+        body: JSON.stringify({ score: gradeForm.score, feedback: gradeForm.feedback, award: gradeForm.award, showcased: gradeForm.showcased, showcaseDownloadable: gradeForm.showcaseDownloadable, status: 'graded' }),
       });
       if (res.ok) {
         setGradingId(null);
-        setGradeForm({ score: '', feedback: '', award: '', showcased: false });
+        setGradeForm({ score: '', feedback: '', award: '', showcased: false, showcaseDownloadable: false });
         setMessage('评分成功');
         loadSubmissions();
       }
@@ -913,7 +913,7 @@ export default function AdminPage() {
                           <button
                             onClick={() => {
                               setGradingId(gradingId === sub.id ? null : sub.id);
-                              setGradeForm({ score: sub.score?.toString() || '', feedback: sub.feedback || '', award: sub.award || '', showcased: sub.showcased || false });
+                              setGradeForm({ score: sub.score?.toString() || '', feedback: sub.feedback || '', award: sub.award || '', showcased: sub.showcased || false, showcaseDownloadable: sub.showcaseDownloadable || false });
                             }}
                             className="flex items-center gap-1 px-3 py-1.5 text-xs bg-primary-50 text-primary-600 rounded-lg hover:bg-primary-100 transition"
                           >
@@ -997,12 +997,19 @@ export default function AdminPage() {
                               )}
                             </div>
                           </div>
-                          <div className="flex items-end">
+                          <div className="flex items-end flex-wrap gap-4">
                             <label className="flex items-center gap-2 cursor-pointer">
                               <input type="checkbox" checked={gradeForm.showcased}
                                 onChange={(e) => setGradeForm({ ...gradeForm, showcased: e.target.checked })}
                                 className="w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
                               <span className="text-sm text-gray-700">在论文公示板展示</span>
+                            </label>
+                            <label className={`flex items-center gap-2 ${gradeForm.showcased ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'}`} title={gradeForm.showcased ? '' : '需先开启公示'}>
+                              <input type="checkbox" checked={gradeForm.showcaseDownloadable}
+                                disabled={!gradeForm.showcased}
+                                onChange={(e) => setGradeForm({ ...gradeForm, showcaseDownloadable: e.target.checked })}
+                                className="w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
+                              <span className="text-sm text-gray-700">允许在公示页下载论文</span>
                             </label>
                           </div>
                         </div>

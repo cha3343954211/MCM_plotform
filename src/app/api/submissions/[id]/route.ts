@@ -22,7 +22,7 @@ export async function PUT(
     }
 
     const body = await request.json();
-    const { score, feedback, status, award, showcased } = body;
+    const { score, feedback, status, award, showcased, showcaseDownloadable } = body;
 
     const data: Record<string, unknown> = {};
     if (score !== undefined && score !== '') {
@@ -34,6 +34,7 @@ export async function PUT(
     if (canAward(session.user.role)) {
       if (award !== undefined) data.award = award || null;
       if (showcased !== undefined) data.showcased = Boolean(showcased);
+      if (showcaseDownloadable !== undefined) data.showcaseDownloadable = Boolean(showcaseDownloadable);
     }
 
     const before = await prisma.submission.findUnique({

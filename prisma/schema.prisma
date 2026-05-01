@@ -127,6 +127,7 @@ model Submission {
   status        String      @default("pending") // "pending" | "graded"
   parentId      String?     // 上一个被替换的版本 id（链表）
   isLatest      Boolean     @default(true) // 当前是否为该 (user, competition) 下最新版本
+  showcaseDownloadable Boolean @default(false) // 公示板是否允许公开下载论文
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
   userId        String

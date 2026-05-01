@@ -21,7 +21,13 @@ export async function GET() {
       take: 100,
     });
 
-    return NextResponse.json(submissions);
+    // 仅在允许下载时才暴露 filePath / fileName，防止未开放的论文被猜测下载
+    const sanitized = (submissions as any[]).map((s) => ({
+      ...s,
+      fileName: s.showcaseDownloadable ? s.fileName : undefined,
+      filePath: s.showcaseDownloadable ? s.filePath : undefined,
+    }));
+    return NextResponse.json(sanitized);
   } catch {
     return NextResponse.json([], { status: 500 });
   }

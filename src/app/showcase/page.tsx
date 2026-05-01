@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Trophy, Award, Medal, Star, ExternalLink } from 'lucide-react';
+import { Trophy, Award, Medal, Star, ExternalLink, Download } from 'lucide-react';
 import { formatDate, getAwardLabel, getAwardColor, isPresetAward } from '@/lib/utils';
 import { useSiteConfig } from '@/components/SiteConfigProvider';
 import ShowcaseInteraction from '@/components/ShowcaseInteraction';
@@ -151,6 +151,16 @@ export default function ShowcasePage() {
                     )}
                     <p className="text-xs text-gray-300 mt-2">{formatDate(sub.createdAt)}</p>
                   </div>
+                  {sub.showcaseDownloadable && sub.filePath && (
+                    <a
+                      href={`/api/download?path=${encodeURIComponent(sub.filePath)}&name=${encodeURIComponent(sub.fileName || '论文.pdf')}`}
+                      className="self-start sm:self-center inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium text-white shadow-sm"
+                      style={{ background: `linear-gradient(135deg, ${config.primaryColor}, ${config.primaryColor}cc)` }}
+                      title={sub.fileName || '下载论文'}
+                    >
+                      <Download className="w-3.5 h-3.5" /> 下载论文
+                    </a>
+                  )}
                 </div>
                 <ShowcaseInteraction submissionId={sub.id} />
               </div>
