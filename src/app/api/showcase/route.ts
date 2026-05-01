@@ -21,12 +21,20 @@ export async function GET() {
       take: 100,
     });
 
-    // 仅在允许下载时才暴露 filePath / fileName，防止未开放的论文被猜测下载
-    const sanitized = (submissions as any[]).map((s) => ({
-      ...s,
-      fileName: s.showcaseDownloadable ? s.fileName : undefined,
-      filePath: s.showcaseDownloadable ? s.filePath : undefined,
-    }));
+    // 仅在允许下载时才暴露 filePath / fileName / extraFiles，防止未开放的论文被猜测下载
+    const sanitized = (submissions as any[]).map((s) => {
+      if (!s.showcaseDownloadable) {
+        return { ...s, fileName: undefined, filePath: undefined, extraFiles: undefined };
+      }
+      let extras: { name: string; path: string }[] = [];
+      if (s.extraFiles) {
+        try {
+          const arr = JSON.parse(s.extraFiles);
+          if (Array.isArray(arr)) extras = arr.filter((x: any) => x && typeof x.path === 'string');
+        } catch {}
+      }
+      return { ...s, extraFiles: extras };
+    });
     return NextResponse.json(sanitized);
   } catch {
     return NextResponse.json([], { status: 500 });

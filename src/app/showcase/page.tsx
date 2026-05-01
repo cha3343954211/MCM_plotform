@@ -151,15 +151,29 @@ export default function ShowcasePage() {
                     )}
                     <p className="text-xs text-gray-300 mt-2">{formatDate(sub.createdAt)}</p>
                   </div>
-                  {sub.showcaseDownloadable && sub.filePath && (
-                    <a
-                      href={`/api/download?path=${encodeURIComponent(sub.filePath)}&name=${encodeURIComponent(sub.fileName || '论文.pdf')}`}
-                      className="self-start sm:self-center inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium text-white shadow-sm"
-                      style={{ background: `linear-gradient(135deg, ${config.primaryColor}, ${config.primaryColor}cc)` }}
-                      title={sub.fileName || '下载论文'}
-                    >
-                      <Download className="w-3.5 h-3.5" /> 下载论文
-                    </a>
+                  {sub.showcaseDownloadable && (sub.filePath || (Array.isArray(sub.extraFiles) && sub.extraFiles.length > 0)) && (
+                    <div className="self-start sm:self-center flex flex-wrap gap-2">
+                      {sub.filePath && (
+                        <a
+                          href={`/api/download?path=${encodeURIComponent(sub.filePath)}&name=${encodeURIComponent(sub.fileName || '论文.pdf')}`}
+                          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium text-white shadow-sm"
+                          style={{ background: `linear-gradient(135deg, ${config.primaryColor}, ${config.primaryColor}cc)` }}
+                          title={sub.fileName || '下载论文'}
+                        >
+                          <Download className="w-3.5 h-3.5" /> 下载论文
+                        </a>
+                      )}
+                      {Array.isArray(sub.extraFiles) && sub.extraFiles.map((ef: any, i: number) => (
+                        <a
+                          key={i}
+                          href={`/api/download?path=${encodeURIComponent(ef.path)}&name=${encodeURIComponent(ef.name || `附件${i + 1}`)}`}
+                          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium bg-white text-gray-700 ring-1 ring-gray-200 hover:bg-gray-50 shadow-sm"
+                          title={ef.name}
+                        >
+                          <Download className="w-3.5 h-3.5" /> {ef.name || `附件${i + 1}`}
+                        </a>
+                      ))}
+                    </div>
                   )}
                 </div>
                 <ShowcaseInteraction submissionId={sub.id} />
