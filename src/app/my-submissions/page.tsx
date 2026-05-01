@@ -118,12 +118,13 @@ export default function MySubmissionsPage() {
                   <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-xs font-semibold ring-1 ${getAwardColor(sub.award)}`}>
                     <Award className="w-3.5 h-3.5" /> {getAwardLabel(sub.award)}
                   </span>
-                  <button
-                    onClick={() => window.print()}
+                  <Link
+                    href={`/certificate/${sub.id}`}
+                    target="_blank"
                     className="ml-2 inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-xs font-medium bg-blue-50 text-blue-600 hover:bg-blue-100"
                   >
-                    <Download className="w-3.5 h-3.5" /> 打印/保存证书
-                  </button>
+                    <Download className="w-3.5 h-3.5" /> 下载证书
+                  </Link>
                 </div>
               )}
               <p className="text-xs text-gray-300 mt-1">提交时间: {formatDate(sub.createdAt)}</p>
