@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
-import { Shield, Plus, FileText, Users, ChevronDown, ChevronUp, Download, Save, Trash2, Edit3, HardDrive, Upload, X, Paperclip, Megaphone, Pin, Settings, FileDown, Activity, CheckCircle2, XCircle, Key, Sparkles, Send, Bell, Search, BarChart3, Layers, HelpCircle } from 'lucide-react';
+import { Shield, Plus, FileText, Users, ChevronDown, ChevronUp, Download, Save, Trash2, Edit3, HardDrive, Upload, X, Paperclip, Megaphone, Pin, Settings, FileDown, Activity, CheckCircle2, XCircle, Key, Sparkles, Send, Bell, Search, BarChart3, Layers, HelpCircle, Database, AlertTriangle } from 'lucide-react';
 import MarkdownEditor from '@/components/MarkdownEditor';
 import { formatDate, getStatusLabel, getStatusColor, AWARD_OPTIONS, getAwardLabel, getAwardColor, GRADIENT_PRESETS, buildHeroGradient } from '@/lib/utils';
 import { canReview, isAdminRole, isSuperAdminRole, roleLabel } from '@/lib/roles';
@@ -26,7 +26,7 @@ export default function AdminPage() {
   const router = useRouter();
   const canReviewSubmissions = canReview(session?.user?.role);
   const canAward = isSuperAdminRole(session?.user?.role);
-  const [tab, setTab] = useState<'dashboard' | 'competitions' | 'templates' | 'submissions' | 'teams' | 'users' | 'files' | 'announcements' | 'loginLogs' | 'cleanup' | 'settings' | 'notifications' | 'guide'>('dashboard');
+  const [tab, setTab] = useState<'dashboard' | 'competitions' | 'templates' | 'submissions' | 'teams' | 'users' | 'files' | 'announcements' | 'loginLogs' | 'cleanup' | 'backup' | 'settings' | 'notifications' | 'guide'>('dashboard');
   const [siteConfigForm, setSiteConfigForm] = useState({
     siteName: '', siteDesc: '', heroTitle: '', heroDesc: '', footerText: '', primaryColor: '#2563eb', secondaryColor: '', gradientEnabled: false, gradientAngle: 160, logoUrl: '', bannerText: '', bannerEnabled: false, maxFileSize: 10, maxSubmissionVersions: 5, commentsEnabled: true,
   });
@@ -511,6 +511,7 @@ export default function AdminPage() {
     { key: 'files' as const, label: '文件存储', icon: HardDrive, count: files.totalCount || 0 },
     { key: 'loginLogs' as const, label: '登录日志', icon: Activity, count: loginLogs.length },
     { key: 'cleanup' as const, label: '数据清理', icon: Sparkles, count: 0 },
+    { key: 'backup' as const, label: '数据备份', icon: Database, count: 0 },
     { key: 'notifications' as const, label: '通知发送', icon: Bell, count: 0 },
     { key: 'settings' as const, label: '站点设置', icon: Settings, count: 0 },
     { key: 'guide' as const, label: '使用说明', icon: HelpCircle, count: 0 },
@@ -1589,6 +1590,9 @@ export default function AdminPage() {
 
       {/* ===== 数据清理 ===== */}
       {tab === 'cleanup' && <CleanupPanel onMessage={setMessage} />}
+
+      {/* ===== 数据备份 ===== */}
+      {tab === 'backup' && <BackupPanel onMessage={setMessage} canRestore={canAward} />}
 
       {/* ===== 通知发送 ===== */}
       {tab === 'notifications' && (
@@ -2725,6 +2729,173 @@ function TemplatesPanel({ onMessage, onApply }: { onMessage: (m: string) => void
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+// ============== 数据备份 / 恢复 ==============
+function BackupPanel({ onMessage, canRestore }: { onMessage: (m: string) => void; canRestore: boolean }) {
+  const [exporting, setExporting] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importPreview, setImportPreview] = useState<any>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const exportAll = async () => {
+    setExporting(true);
+    try {
+      const res = await fetch('/api/admin/backup');
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        onMessage(d.error || '导出失败');
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const date = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+      a.href = url;
+      a.download = `mcm-backup-${date}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      onMessage('备份导出成功');
+    } catch {
+      onMessage('导出失败');
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const onPick = (f: File | null) => {
+    setImportFile(f);
+    setImportPreview(null);
+    if (!f) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const obj = JSON.parse(String(reader.result || ''));
+        setImportPreview({
+          backupVersion: obj.backupVersion,
+          exportedAt: obj.exportedAt,
+          counts: obj.counts || {
+            users: obj.data?.users?.length,
+            competitions: obj.data?.competitions?.length,
+            submissions: obj.data?.submissions?.length,
+            teams: obj.data?.teams?.length,
+          },
+        });
+      } catch {
+        onMessage('备份文件不是合法 JSON');
+        setImportFile(null);
+      }
+    };
+    reader.readAsText(f);
+  };
+
+  const importAll = async () => {
+    if (!importFile || !importPreview) return;
+    const confirmText = '此操作将清空当前数据库（用户、赛题、提交、团队等）并替换为备份内的数据，且无法撤销。\n\n请输入「确认导入」继续：';
+    const input = window.prompt(confirmText);
+    if (input !== '确认导入') {
+      onMessage('已取消导入');
+      return;
+    }
+    setImporting(true);
+    try {
+      const text = await importFile.text();
+      const res = await fetch('/api/admin/backup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: text,
+      });
+      const d = await res.json().catch(() => ({}));
+      if (res.ok) {
+        onMessage(`导入成功：用户 ${d.counts?.users || 0} · 赛题 ${d.counts?.competitions || 0} · 提交 ${d.counts?.submissions || 0}`);
+        setImportFile(null);
+        setImportPreview(null);
+        if (fileRef.current) fileRef.current.value = '';
+        // 重要：导入会替换登录用户，2 秒后强制退出
+        setTimeout(() => { window.location.href = '/login'; }, 1500);
+      } else {
+        onMessage(d.error || '导入失败');
+      }
+    } catch (e) {
+      onMessage('导入失败：' + (e instanceof Error ? e.message : ''));
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-lg font-semibold flex items-center gap-2"><Database className="w-5 h-5" /> 数据备份与迁移</h2>
+        <p className="text-gray-400 text-sm mt-0.5">用于服务器迁移或灾备：将所有数据库表打包为 JSON，可在另一台服务器导入恢复。</p>
+      </div>
+
+      <div className="rounded-2xl border border-amber-200 bg-amber-50/60 p-4 text-sm text-amber-800 flex gap-3">
+        <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+        <div className="space-y-1">
+          <p className="font-medium">注意：备份仅含数据库内容，不含上传的论文文件。</p>
+          <p>迁移时还需手动复制 <code className="px-1 bg-white/70 rounded">public/uploads/</code> 目录到新服务器对应位置，否则下载链接会失效。</p>
+        </div>
+      </div>
+
+      {/* 导出 */}
+      <div className="rounded-2xl border border-gray-200 bg-white p-5">
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <div>
+            <h3 className="font-semibold text-gray-900">导出全部数据</h3>
+            <p className="text-sm text-gray-500 mt-1">包含用户、赛题、提交、团队、公告、评论、点赞、评委评分、通知、登录日志、站点配置、使用说明等。</p>
+          </div>
+          <button
+            onClick={exportAll}
+            disabled={exporting}
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gray-900 text-white text-sm font-medium hover:bg-gray-800 disabled:opacity-50"
+          >
+            <Download className="w-4 h-4" /> {exporting ? '导出中...' : '一键导出 JSON'}
+          </button>
+        </div>
+      </div>
+
+      {/* 导入 */}
+      <div className={`rounded-2xl border p-5 ${canRestore ? 'border-red-200 bg-red-50/40' : 'border-gray-200 bg-gray-50/60 opacity-70'}`}>
+        <div className="flex items-start gap-2 mb-4">
+          <h3 className="font-semibold text-gray-900">导入备份（高危）</h3>
+          {!canRestore && <span className="px-2 py-0.5 rounded-lg text-xs bg-gray-200 text-gray-600">仅高级管理员可用</span>}
+        </div>
+        <p className="text-sm text-gray-600 mb-4">导入会先清空当前数据库再写入备份内容。请先做好当前服务器的导出。</p>
+
+        {canRestore && (
+          <>
+            <input
+              ref={fileRef}
+              type="file"
+              accept="application/json,.json"
+              onChange={(e) => onPick(e.target.files?.[0] || null)}
+              className="block text-sm text-gray-500 file:mr-3 file:px-4 file:py-2 file:rounded-xl file:border-0 file:bg-gray-900 file:text-white file:cursor-pointer"
+            />
+
+            {importPreview && (
+              <div className="mt-4 p-4 rounded-xl bg-white border border-gray-200 text-sm text-gray-700 space-y-1">
+                <p>备份版本：<span className="font-mono">v{importPreview.backupVersion ?? '?'}</span></p>
+                <p>导出时间：<span className="font-mono">{importPreview.exportedAt || '-'}</span></p>
+                <p>包含数量：用户 <b>{importPreview.counts?.users ?? '-'}</b> · 赛题 <b>{importPreview.counts?.competitions ?? '-'}</b> · 提交 <b>{importPreview.counts?.submissions ?? '-'}</b> · 团队 <b>{importPreview.counts?.teams ?? '-'}</b></p>
+              </div>
+            )}
+
+            <button
+              onClick={importAll}
+              disabled={!importFile || !importPreview || importing}
+              className="mt-4 inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-red-600 text-white text-sm font-medium hover:bg-red-700 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <Upload className="w-4 h-4" /> {importing ? '导入中...' : '执行导入（覆盖当前数据）'}
+            </button>
+          </>
+        )}
+      </div>
     </div>
   );
 }
