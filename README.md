@@ -45,7 +45,7 @@
 ### 1) 环境要求
 
 - Node.js >= 18
-- npm >= 9
+- npm（随 Node.js 安装）
 
 ### 2) 安装依赖
 
@@ -118,4 +118,3 @@ npm run db:seed    # 初始化种子数据
 ```bash
 curl http://localhost:3000/api/health
 ```
-
