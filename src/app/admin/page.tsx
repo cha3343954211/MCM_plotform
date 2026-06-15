@@ -3338,8 +3338,15 @@ function AiConfigPanel({ onMessage }: { onMessage: (m: string) => void }) {
 
   useEffect(() => {
     fetch('/api/admin/ai-config', { cache: 'no-store' })
-      .then((r) => r.json())
+      .then(async (r) => {
+        // 处理空 body / 非 200
+        const text = await r.text();
+        if (!r.ok) throw new Error(text || `HTTP ${r.status}`);
+        if (!text) throw new Error('空响应（可能 dev server 未运行或编译错误）');
+        return JSON.parse(text);
+      })
       .then((cfg) => {
+        if (!cfg || typeof cfg !== 'object') throw new Error('返回数据格式错误');
         setForm((f) => ({
           ...f,
           baseUrl: cfg.baseUrl || 'https://api.openai.com/v1',
@@ -3357,8 +3364,11 @@ function AiConfigPanel({ onMessage }: { onMessage: (m: string) => void }) {
         }));
         setLoaded(true);
       })
-      .catch(() => setLoaded(true));
-  }, []);
+      .catch((e) => {
+        onMessage('加载 AI 配置失败：' + (e?.message || '未知错误'));
+        setLoaded(true);
+      });
+  }, [onMessage]);
 
   const loadPresets = useCallback(async () => {
     setPresetsLoading(true);
@@ -3487,11 +3497,18 @@ function AiConfigPanel({ onMessage }: { onMessage: (m: string) => void }) {
           enabled: form.enabled,
         }),
       });
-      const j = await r.json().catch(() => ({}));
+      // 防御：空 body / HTML 错误页（dev server 编译失败时会返回 HTML）
+      const text = await r.text();
+      let j: any = {};
+      if (text) {
+        try { j = JSON.parse(text); } catch { j = { error: `返回非 JSON（HTTP ${r.status}）：${text.slice(0, 120)}` }; }
+      } else {
+        j = { error: `空响应（HTTP ${r.status}，请检查 dev server 是否在运行）` };
+      }
       if (!r.ok) { onMessage(j.error || '保存失败'); return; }
       onMessage('AI 评审配置已保存');
       setForm((f) => ({ ...f, hasApiKey: !!j.hasApiKey, apiKeyMasked: j.apiKeyMasked || '', apiKey: '' }));
-    } catch (e: any) { onMessage(e?.message || '保存失败'); }
+    } catch (e: any) { onMessage('保存失败：' + (e?.message || '未知错误')); }
     finally { setSaving(false); }
   };
 
