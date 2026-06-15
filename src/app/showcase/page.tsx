@@ -149,7 +149,9 @@ export default function ShowcasePage() {
                         {sub.feedback && <span className="ml-2">| {sub.feedback}</span>}
                       </div>
                     )}
-                    <p className="text-xs text-gray-300 mt-2">{formatDate(sub.createdAt)}</p>
+                    {config.showSubmissionTime !== false && (
+                      <p className="text-xs text-gray-300 mt-2">{formatDate(sub.createdAt)}</p>
+                    )}
                   </div>
                   {sub.showcaseDownloadable && (sub.filePath || (Array.isArray(sub.extraFiles) && sub.extraFiles.length > 0)) && (
                     <div className="self-start sm:self-center flex flex-wrap gap-2">

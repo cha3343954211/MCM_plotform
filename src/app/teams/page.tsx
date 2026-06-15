@@ -6,10 +6,12 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Users, Plus, Copy, LogOut, Trash2, Crown, ChevronRight, FileText, Edit3, UserMinus, ArrowRightLeft, Download, Paperclip } from 'lucide-react';
 import { formatDate } from '@/lib/utils';
+import { useSiteConfig } from '@/components/SiteConfigProvider';
 
 export default function TeamsPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
+  const { config } = useSiteConfig();
   const [list, setList] = useState<any[]>([]);
   const [comps, setComps] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -60,6 +62,10 @@ export default function TeamsPage() {
         setShowCreate(false);
         setCreateForm({ name: '', competitionId: '' });
         reload();
+      } else if (res.status === 401) {
+        // 会话失效：跳登录
+        setMsg({ type: 'err', text: `${d.error || '请先登录'}，即将跳转…` });
+        setTimeout(() => router.push('/login?callbackUrl=/teams'), 800);
       } else {
         setMsg({ type: 'err', text: d.error || '创建失败' });
       }
@@ -81,6 +87,9 @@ export default function TeamsPage() {
         setShowJoin(false);
         setJoinCode('');
         reload();
+      } else if (res.status === 401) {
+        setMsg({ type: 'err', text: `${d.error || '请先登录'}，即将跳转…` });
+        setTimeout(() => router.push('/login?callbackUrl=/teams'), 800);
       } else {
         setMsg({ type: 'err', text: d.error || '加入失败' });
       }
@@ -361,8 +370,14 @@ export default function TeamsPage() {
                           <div className="min-w-0">
                             <p className="text-xs font-medium text-gray-800 truncate">{sub.fileName}</p>
                             <p className="text-[11px] text-gray-400">
-                              {formatDate(sub.createdAt)}
-                              {sub.score !== null && sub.score !== undefined ? ` · ${sub.score} 分` : ''}
+                              {config.showSubmissionTime !== false ? (
+                                <>
+                                  {formatDate(sub.createdAt)}
+                                  {sub.score !== null && sub.score !== undefined ? ` · ${sub.score} 分` : ''}
+                                </>
+                              ) : (
+                                sub.score !== null && sub.score !== undefined ? `${sub.score} 分` : ''
+                              )}
                             </p>
                           </div>
                           <div className="flex flex-wrap gap-1">

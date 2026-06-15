@@ -17,10 +17,7 @@ export async function POST(request: NextRequest) {
 
   const team = await (prisma as any).team.findUnique({
     where: { inviteCode },
-    include: {
-      competition: true,
-      members: true,
-    },
+    include: { competition: true },
   });
   if (!team) return NextResponse.json({ error: '邀请码无效' }, { status: 404 });
   if (team.competition.status === 'ended') return NextResponse.json({ error: '赛题已结束' }, { status: 400 });
@@ -36,13 +33,25 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: '你已在该赛题下加入了其他团队，请先退出' }, { status: 400 });
   }
 
-  if (team.members.length >= team.maxMembers) {
-    return NextResponse.json({ error: '团队已满员' }, { status: 400 });
+  // 事务化「校验满员 + 写入成员」避免 TOCTOU 竞争导致超员
+  try {
+    await prisma.$transaction(async (tx: any) => {
+      const count = await tx.teamMember.count({ where: { teamId: team.id } });
+      if (count >= team.maxMembers) {
+        const e: any = new Error('团队已满员');
+        e.status = 400;
+        throw e;
+      }
+      await tx.teamMember.create({
+        data: { teamId: team.id, userId: session.user.id, role: 'member' },
+      });
+    });
+  } catch (e: any) {
+    return NextResponse.json(
+      { error: e?.message || '加入失败' },
+      { status: e?.status || 500 }
+    );
   }
-
-  await (prisma as any).teamMember.create({
-    data: { teamId: team.id, userId: session.user.id, role: 'member' },
-  });
 
   // 通知队长
   await (prisma as any).notification.create({

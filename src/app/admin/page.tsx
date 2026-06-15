@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
-import { Shield, Plus, FileText, Users, ChevronDown, ChevronUp, Download, Save, Trash2, Edit3, HardDrive, Upload, X, Paperclip, Megaphone, Pin, Settings, FileDown, Activity, CheckCircle2, XCircle, Key, Sparkles, Send, Bell, Search, BarChart3, Layers, HelpCircle, Database, AlertTriangle } from 'lucide-react';
+import { Shield, Plus, FileText, Users, ChevronDown, ChevronUp, Download, Save, Trash2, Edit3, HardDrive, Upload, X, Paperclip, Megaphone, Pin, Settings, FileDown, Activity, CheckCircle2, XCircle, Key, Sparkles, Send, Bell, Search, BarChart3, Layers, HelpCircle, Database, AlertTriangle, Bot, Cpu, RefreshCw, Eye, EyeOff, Bookmark, Check, Loader2 } from 'lucide-react';
 import MarkdownEditor from '@/components/MarkdownEditor';
 import { formatDate, getStatusLabel, getStatusColor, AWARD_OPTIONS, getAwardLabel, getAwardColor, GRADIENT_PRESETS, buildHeroGradient } from '@/lib/utils';
 import { canReview, isAdminRole, isSuperAdminRole, roleLabel } from '@/lib/roles';
@@ -26,7 +26,7 @@ export default function AdminPage() {
   const router = useRouter();
   const canReviewSubmissions = canReview(session?.user?.role);
   const canAward = isSuperAdminRole(session?.user?.role);
-  const [tab, setTab] = useState<'dashboard' | 'competitions' | 'templates' | 'submissions' | 'teams' | 'users' | 'files' | 'announcements' | 'loginLogs' | 'cleanup' | 'backup' | 'settings' | 'notifications' | 'guide'>('dashboard');
+  const [tab, setTab] = useState<'dashboard' | 'competitions' | 'templates' | 'submissions' | 'teams' | 'users' | 'files' | 'announcements' | 'loginLogs' | 'cleanup' | 'backup' | 'settings' | 'notifications' | 'guide' | 'aiConfig'>('dashboard');
   const [siteConfigForm, setSiteConfigForm] = useState({
     siteName: '', siteDesc: '', heroTitle: '', heroDesc: '', footerText: '', primaryColor: '#2563eb', secondaryColor: '', gradientEnabled: false, gradientAngle: 160, logoUrl: '', bannerText: '', bannerEnabled: false, maxFileSize: 10, maxSubmissionVersions: 5, commentsEnabled: true,
   });
@@ -37,7 +37,6 @@ export default function AdminPage() {
   const [users, setUsers] = useState<any[]>([]);
   const [files, setFiles] = useState<any>({ files: [], totalSize: 0, totalCount: 0 });
   const [loading, setLoading] = useState(true);
-  const [loadedTabs, setLoadedTabs] = useState<Set<string>>(new Set());
   const [showForm, setShowForm] = useState(false);
   const [editingComp, setEditingComp] = useState<any>(null);
   const [compForm, setCompForm] = useState({
@@ -56,6 +55,16 @@ export default function AdminPage() {
   const [teamCompetitionFilter, setTeamCompetitionFilter] = useState('all');
   const [collapsedTeamComps, setCollapsedTeamComps] = useState<Set<string>>(new Set());
   const [expandedComps, setExpandedComps] = useState<Set<string>>(new Set());
+  // AI 评审：每个提交上独立的运行态
+  const [aiRunningId, setAiRunningId] = useState<string | null>(null);
+  const [aiLatest, setAiLatest] = useState<Record<string, { reviewId: string; score: number | null; status: string; applied: boolean; createdAt: string }>>({});
+  const [aiHistoryOpen, setAiHistoryOpen] = useState<Set<string>>(new Set());
+  const [aiHistory, setAiHistory] = useState<Record<string, any[]>>({});
+  const [aiHistoryLoading, setAiHistoryLoading] = useState<Set<string>>(new Set());
+  const [aiReviewApplying, setAiReviewApplying] = useState<Set<string>>(new Set());
+  const [aiRerunBy, setAiRerunBy] = useState<Set<string>>(new Set());
+  const [aiReviewExpanded, setAiReviewExpanded] = useState<Set<string>>(new Set());
+  const [aiReviewDetails, setAiReviewDetails] = useState<Record<string, any>>({});
   // 批量操作
   const [selectedSubs, setSelectedSubs] = useState<Set<string>>(new Set());
   const [batchBusy, setBatchBusy] = useState(false);
@@ -78,6 +87,18 @@ export default function AdminPage() {
   const [notifySelectedUsers, setNotifySelectedUsers] = useState<Set<string>>(new Set());
   const [notifySending, setNotifySending] = useState(false);
 
+  // 「更多」标签：必须放在任何提前 return 之前，避免 hooks 顺序变化触发 React 报错
+  const [showMoreTabs, setShowMoreTabs] = useState(false);
+  const moreRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!showMoreTabs) return;
+    const onDown = (e: MouseEvent) => { if (moreRef.current && !moreRef.current.contains(e.target as Node)) setShowMoreTabs(false); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setShowMoreTabs(false); };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey); };
+  }, [showMoreTabs]);
+
   const loadCompetitions = useCallback(async () => {
     const res = await fetch('/api/competitions', { cache: 'no-store' });
     const data = await res.json();
@@ -88,6 +109,38 @@ export default function AdminPage() {
     const res = await fetch('/api/submissions', { cache: 'no-store' });
     const data = await res.json();
     setSubmissions(Array.isArray(data) ? data : []);
+  }, []);
+
+  // AI 评审历史加载：必须放在 return 之前，避免 hooks 顺序变化
+  const loadAiHistoryFor = useCallback(async (submissionId: string, force = false) => {
+    if (!submissionId) return;
+    if (!force && aiHistory[submissionId]) return;
+    setAiHistoryLoading((s) => new Set(s).add(submissionId));
+    try {
+      const r = await fetch(`/api/admin/ai-reviews?submissionId=${encodeURIComponent(submissionId)}&limit=50`, { cache: 'no-store' });
+      const j = await r.json();
+      setAiHistory((m) => ({ ...m, [submissionId]: j.reviews || [] }));
+    } finally {
+      setAiHistoryLoading((s) => { const next = new Set(s); next.delete(submissionId); return next; });
+    }
+  }, [aiHistory]);
+
+  // 拉取每个提交最新一条 AI 评审（使用 bulk 接口，避免 N+1）
+  const loadAiLatest = useCallback(async (subs: any[]) => {
+    if (!Array.isArray(subs) || subs.length === 0) { setAiLatest({}); return; }
+    try {
+      // 单次请求拿所有最新记录（最多 500）
+      const ids = subs.map((s) => s.id).filter(Boolean);
+      const r = await fetch(`/api/admin/ai-reviews/latest?submissionIds=${encodeURIComponent(ids.join(','))}`, { cache: 'no-store' });
+      const j = await r.json().catch(() => ({}));
+      const latest: Record<string, any> = j.latest || {};
+      const next: Record<string, any> = {};
+      for (const s of subs) {
+        const row = latest[s.id];
+        if (row) next[s.id] = { reviewId: row.id, score: row.parsedScore, status: row.status, applied: row.applied, createdAt: row.createdAt };
+      }
+      setAiLatest(next);
+    } catch {}
   }, []);
 
   const loadUsers = useCallback(async () => {
@@ -105,21 +158,18 @@ export default function AdminPage() {
   const loadFiles = useCallback(async () => {
     const res = await fetch('/api/admin/files', { cache: 'no-store' });
     setFiles(await res.json());
-    setLoadedTabs((prev) => new Set(prev).add('files'));
   }, []);
 
   const loadAnnouncements = useCallback(async () => {
     const res = await fetch('/api/announcements?all=true', { cache: 'no-store' });
     const data = await res.json();
     setAnnouncements(Array.isArray(data) ? data : []);
-    setLoadedTabs((prev) => new Set(prev).add('announcements'));
   }, []);
 
   const loadLoginLogs = useCallback(async () => {
     const res = await fetch('/api/admin/login-logs', { cache: 'no-store' });
     const data = await res.json();
     setLoginLogs(Array.isArray(data) ? data : []);
-    setLoadedTabs((prev) => new Set(prev).add('loginLogs'));
   }, []);
 
   const loadData = useCallback(async (showSpinner = true) => {
@@ -137,12 +187,18 @@ export default function AdminPage() {
     if (showSpinner) setLoading(false);
   }, [loadCompetitions, loadSubmissions, loadTeams, loadUsers]);
 
+  // 提交列表变化时拉取最新 AI 评审（用于卡片摘要）
+  useEffect(() => {
+    if (submissions.length > 0) loadAiLatest(submissions);
+  }, [submissions, loadAiLatest]);
+
   useEffect(() => {
     if (status !== 'authenticated' || !isAdminRole(session?.user?.role)) return;
-    if (tab === 'files' && !loadedTabs.has('files')) loadFiles();
-    if (tab === 'announcements' && !loadedTabs.has('announcements')) loadAnnouncements();
-    if (tab === 'loginLogs' && !loadedTabs.has('loginLogs')) loadLoginLogs();
-  }, [loadedTabs, loadAnnouncements, loadFiles, loadLoginLogs, session?.user?.role, status, tab]);
+    // 切到对应 tab 时始终重新拉取（避免跨 tab 切换看到过期数据）
+    if (tab === 'files') loadFiles();
+    else if (tab === 'announcements') loadAnnouncements();
+    else if (tab === 'loginLogs') loadLoginLogs();
+  }, [tab, loadAnnouncements, loadFiles, loadLoginLogs, session?.user?.role, status]);
 
   useEffect(() => {
     if (status === 'authenticated') {
@@ -513,9 +569,123 @@ export default function AdminPage() {
     { key: 'cleanup' as const, label: '数据清理', icon: Sparkles, count: 0 },
     { key: 'backup' as const, label: '数据备份', icon: Database, count: 0 },
     { key: 'notifications' as const, label: '通知发送', icon: Bell, count: 0 },
+    { key: 'aiConfig' as const, label: 'AI 评审配置', icon: Cpu, count: 0 },
     { key: 'settings' as const, label: '站点设置', icon: Settings, count: 0 },
     { key: 'guide' as const, label: '使用说明', icon: HelpCircle, count: 0 },
   ];
+
+  // 派生：常驻 + 更多
+  const PRIMARY_KEYS: typeof tabs[number]['key'][] = ['dashboard', 'competitions', 'submissions', 'teams', 'users'];
+  const primaryTabs = tabs.filter((t) => PRIMARY_KEYS.includes(t.key));
+  const moreTabs = tabs.filter((t) => !PRIMARY_KEYS.includes(t.key));
+
+  // ===== AI 评审操作函数 =====
+  const runAiReviewFor = async (sub: any) => {
+    if (!sub?.id) return;
+    if (!/\.pdf$/i.test(sub.fileName || '')) { setMessage('AI 评审仅支持 PDF 文件'); return; }
+    if (aiRunningId) return;
+    setAiRunningId(sub.id);
+    setMessage(`正在对「${sub.fileName}」运行 AI 评审，请稍候…`);
+    const clientController = new AbortController();
+    const clientTimeout = setTimeout(() => clientController.abort(), 180000);
+    try {
+      const res = await fetch('/api/admin/ai-reviews', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ submissionId: sub.id }),
+        signal: clientController.signal,
+      });
+      clearTimeout(clientTimeout);
+      const ct = res.headers.get('content-type') || '';
+      const raw = await res.text();
+      let data: any = {};
+      if (ct.includes('application/json') || raw.startsWith('{') || raw.startsWith('[')) {
+        try { data = raw ? JSON.parse(raw) : {}; } catch { data = { error: '服务返回非 JSON：' + raw.slice(0, 200) }; }
+      } else {
+        data = { error: `服务返回非 JSON（status=${res.status}）：` + raw.slice(0, 200) };
+      }
+      if (res.ok && data.status === 'success') setMessage(`AI 评审完成：分数 ${data.result?.score ?? '-'}`);
+      else if (res.ok && data.status === 'failed') setMessage(`AI 评审失败：${data.error || '未知错误'}`);
+      else setMessage(data.error || `AI 评审失败（HTTP ${res.status}）`);
+      try {
+        const r = await fetch(`/api/admin/ai-reviews?submissionId=${encodeURIComponent(sub.id)}&limit=1`, { cache: 'no-store' });
+        const j = await r.json();
+        const first = j?.reviews?.[0];
+        if (first) {
+          setAiLatest((prev) => ({ ...prev, [sub.id]: { reviewId: first.id, score: first.parsedScore, status: first.status, applied: first.applied, createdAt: first.createdAt } }));
+        }
+        if (aiHistoryOpen.has(sub.id)) {
+          const rh = await fetch(`/api/admin/ai-reviews?submissionId=${encodeURIComponent(sub.id)}&limit=50`, { cache: 'no-store' });
+          const jh = await rh.json();
+          setAiHistory((m) => ({ ...m, [sub.id]: jh.reviews || [] }));
+        }
+      } catch {}
+    } catch (e: any) {
+      if (e?.name === 'AbortError' || /aborted|abort/i.test(String(e?.message || ''))) {
+        setMessage('AI 评审等待超过 3 分钟已自动取消。可能是模型较慢或论文很长，请在「AI 评审配置」调大 timeoutMs 后重试。');
+      } else {
+        setMessage(e?.message || 'AI 评审失败');
+      }
+    } finally {
+      clearTimeout(clientTimeout);
+      setAiRunningId(null);
+    }
+  };
+
+  const toggleAiHistory = async (submissionId: string) => {
+    const willOpen = !aiHistoryOpen.has(submissionId);
+    setAiHistoryOpen((s) => { const next = new Set(s); if (willOpen) next.add(submissionId); else next.delete(submissionId); return next; });
+    if (willOpen) await loadAiHistoryFor(submissionId);
+  };
+
+  const rerunAiReviewFor = async (submissionId: string) => {
+    if (aiRerunBy.has(submissionId) || aiRunningId) return;
+    setAiRerunBy((s) => new Set(s).add(submissionId));
+    setMessage('正在重新运行 AI 评审…');
+    try {
+      const res = await fetch('/api/admin/ai-reviews', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ submissionId }) });
+      const j = await res.json().catch(() => ({}));
+      if (res.ok) setMessage(`AI 评审完成：${j.status === 'success' ? '成功' : '失败'}，分数 ${j.result?.score ?? '-'}`);
+      else setMessage(j.error || 'AI 评审失败');
+      await loadAiHistoryFor(submissionId, true);
+      try {
+        const r = await fetch(`/api/admin/ai-reviews?submissionId=${encodeURIComponent(submissionId)}&limit=1`, { cache: 'no-store' });
+        const data = await r.json();
+        const first = data?.reviews?.[0];
+        if (first) {
+          setAiLatest((prev) => ({ ...prev, [submissionId]: { reviewId: first.id, score: first.parsedScore, status: first.status, applied: first.applied, createdAt: first.createdAt } }));
+        }
+      } catch {}
+    } catch (e: any) { setMessage(e?.message || 'AI 评审失败'); }
+    finally { setAiRerunBy((s) => { const next = new Set(s); next.delete(submissionId); return next; }); }
+  };
+
+  const applyAiReview = async (reviewId: string, submissionId: string) => {
+    if (!window.confirm('确认将该 AI 评审的分数采纳为该提交的成绩吗？此操作会覆盖当前分数。')) return;
+    setAiReviewApplying((s) => new Set(s).add(reviewId));
+    try {
+      const res = await fetch(`/api/admin/ai-reviews/${reviewId}/apply`, { method: 'POST' });
+      const j = await res.json().catch(() => ({}));
+      if (res.ok) {
+        setMessage('已采纳 AI 评分为该提交成绩');
+        await loadAiHistoryFor(submissionId, true);
+        setAiLatest((prev) => prev[submissionId] ? { ...prev, [submissionId]: { ...prev[submissionId], applied: true } } : prev);
+        await loadSubmissions();
+      } else { setMessage(j.error || '采纳失败'); }
+    } catch (e: any) { setMessage(e?.message || '采纳失败'); }
+    finally { setAiReviewApplying((s) => { const next = new Set(s); next.delete(reviewId); return next; }); }
+  };
+
+  const toggleAiReviewDetail = async (reviewId: string) => {
+    const willOpen = !aiReviewExpanded.has(reviewId);
+    setAiReviewExpanded((s) => { const next = new Set(s); if (willOpen) next.add(reviewId); else next.delete(reviewId); return next; });
+    if (willOpen && !aiReviewDetails[reviewId]) {
+      try {
+        const r = await fetch(`/api/admin/ai-reviews/${reviewId}`, { cache: 'no-store' });
+        const j = await r.json();
+        setAiReviewDetails((m) => ({ ...m, [reviewId]: j }));
+      } catch {}
+    }
+  };
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
@@ -536,15 +706,13 @@ export default function AdminPage() {
         </div>
       )}
 
-      <div className="flex gap-1 p-1 bg-black/[0.03] rounded-2xl mb-8 overflow-x-auto touch-scroll">
-        {tabs.map((t) => (
+      <div className="flex items-center gap-1 p-1 bg-black/[0.03] rounded-2xl mb-4">
+        {primaryTabs.map((t) => (
           <button
             key={t.key}
-            onClick={() => setTab(t.key)}
+            onClick={() => { setTab(t.key); setShowMoreTabs(false); }}
             className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-xl transition-all duration-300 whitespace-nowrap ${
-              tab === t.key
-                ? 'bg-white shadow-sm text-gray-900'
-                : 'text-gray-500 hover:text-gray-700'
+              tab === t.key ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'
             }`}
           >
             <t.icon className="w-4 h-4" />
@@ -552,6 +720,57 @@ export default function AdminPage() {
             {t.count > 0 && <span className="ml-0.5 px-1.5 py-0.5 text-[10px] bg-gray-100 text-gray-500 rounded-lg">{t.count}</span>}
           </button>
         ))}
+        <div className="relative" ref={moreRef}>
+          <button
+            onClick={() => setShowMoreTabs((v) => !v)}
+            className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-xl transition whitespace-nowrap ${
+              moreTabs.some((t) => t.key === tab) ? 'bg-white shadow-sm text-gray-900' : showMoreTabs ? 'bg-white/70 text-gray-700' : 'text-gray-500 hover:text-gray-700'
+            }`}
+            aria-expanded={showMoreTabs}
+            aria-haspopup="true"
+          >
+            <ChevronDown className={`w-4 h-4 transition-transform ${showMoreTabs ? 'rotate-180' : ''}`} />
+            更多
+            {moreTabs.some((t) => t.count > 0) && (
+              <span className="ml-0.5 px-1.5 py-0.5 text-[10px] bg-gray-100 text-gray-500 rounded-lg">
+                {moreTabs.reduce((s, t) => s + t.count, 0)}
+              </span>
+            )}
+            {moreTabs.some((t) => t.key === tab) && (
+              <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-primary-500 ring-2 ring-white" />
+            )}
+          </button>
+          {showMoreTabs && (
+            <div
+              className="absolute z-30 right-0 mt-2 w-[min(92vw,640px)] bg-white rounded-2xl shadow-2xl border border-gray-200 p-3"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="px-2 pt-1 pb-2 flex items-center justify-between">
+                <span className="text-xs text-gray-400">其他功能</span>
+                <button onClick={() => setShowMoreTabs(false)} className="text-gray-400 hover:text-gray-600 p-1 -m-1">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-1">
+                {moreTabs.map((t) => (
+                  <button
+                    key={t.key}
+                    onClick={() => { setTab(t.key); setShowMoreTabs(false); }}
+                    className={`flex items-center gap-2.5 px-3 py-2.5 text-sm rounded-xl text-left transition ${
+                      tab === t.key ? 'bg-primary-50 text-primary-700 ring-1 ring-primary-200' : 'text-gray-700 hover:bg-gray-50'
+                    }`}
+                  >
+                    <t.icon className={`w-4 h-4 flex-shrink-0 ${tab === t.key ? 'text-primary-600' : 'text-gray-400'}`} />
+                    <span className="flex-1 truncate">{t.label}</span>
+                    {t.count > 0 && (
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded ${tab === t.key ? 'bg-primary-100 text-primary-700' : 'bg-gray-100 text-gray-500'}`}>{t.count}</span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* ===== 赛题管理 ===== */}
@@ -922,6 +1141,16 @@ export default function AdminPage() {
                             {gradingId === sub.id ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
                           </button>
                         )}
+                        {canReviewSubmissions && /\.pdf$/i.test(sub.fileName || '') && (
+                          <button
+                            onClick={() => runAiReviewFor(sub)}
+                            disabled={aiRunningId === sub.id}
+                            className="flex items-center gap-1 px-3 py-1.5 text-xs bg-violet-50 text-violet-600 rounded-lg hover:bg-violet-100 transition disabled:opacity-50"
+                            title="调用已配置的 AI 模型评审此 PDF 论文"
+                          >
+                            <Bot className="w-3 h-3" /> {aiRunningId === sub.id ? 'AI 评审中…' : 'AI 评审'}
+                          </button>
+                        )}
                         <button
                           onClick={() => handleDeleteSubmission(sub.id)}
                           className="flex items-center gap-1 px-3 py-1.5 text-xs bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition"
@@ -939,6 +1168,164 @@ export default function AdminPage() {
                       {sub.feedback && <span className="text-blue-600">| 评语: {sub.feedback}</span>}
                       {sub.award && <span className={`px-2 py-0.5 rounded-lg text-xs font-semibold ring-1 ${getAwardColor(sub.award)}`}>{getAwardLabel(sub.award)}</span>}
                       {sub.showcased && <span className="px-2 py-0.5 rounded-lg text-xs font-semibold bg-purple-50 text-purple-600 ring-1 ring-purple-200/50">已公示</span>}
+                    </div>
+                  )}
+
+                  {aiLatest[sub.id] && (
+                    <div className="mt-2 p-2 bg-violet-50/70 rounded-lg text-xs flex flex-wrap items-center gap-2">
+                      <Bot className="w-3.5 h-3.5 text-violet-500" />
+                      <span className="text-violet-700">
+                        AI 评审：
+                        {aiLatest[sub.id].status === 'success' && aiLatest[sub.id].score !== null && (
+                          <span className="font-mono font-semibold">{aiLatest[sub.id].score}</span>
+                        )}
+                        {aiLatest[sub.id].status === 'success' && aiLatest[sub.id].score === null && <span>无分数</span>}
+                        {aiLatest[sub.id].status === 'failed' && <span className="text-red-600">失败</span>}
+                        {aiLatest[sub.id].status === 'pending' && <span>进行中</span>}
+                        {aiLatest[sub.id].applied && <span className="ml-1 px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700">已采纳</span>}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => toggleAiHistory(sub.id)}
+                        className="ml-auto inline-flex items-center gap-1 text-violet-600 hover:text-violet-800"
+                      >
+                        {aiHistoryOpen.has(sub.id) ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                        {aiHistoryOpen.has(sub.id) ? '收起历史' : '历史'}
+                        {aiHistory[sub.id] && <span className="px-1 rounded bg-violet-100 text-violet-700">({aiHistory[sub.id].length})</span>}
+                      </button>
+                    </div>
+                  )}
+
+                  {/* 即便暂无最新 AI 评审，也允许展开历史区（提示尚无记录） */}
+                  {!aiLatest[sub.id] && /\.pdf$/i.test(sub.fileName || '') && (
+                    <div className="mt-2 flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => toggleAiHistory(sub.id)}
+                        className="inline-flex items-center gap-1 text-[11px] text-gray-400 hover:text-violet-600"
+                      >
+                        {aiHistoryOpen.has(sub.id) ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                        {aiHistoryOpen.has(sub.id) ? '收起 AI 评审历史' : '查看 AI 评审历史'}
+                      </button>
+                    </div>
+                  )}
+
+                  {/* AI 评审历史（按提交展开） */}
+                  {aiHistoryOpen.has(sub.id) && (
+                    <div className="mt-2 border border-violet-200/60 rounded-lg bg-white overflow-hidden">
+                      <div className="flex items-center justify-between px-3 py-2 bg-violet-50/60 border-b border-violet-100">
+                        <div className="text-xs text-violet-700 flex items-center gap-1.5 font-medium">
+                          <Bot className="w-3.5 h-3.5" />
+                          AI 评审历史
+                          <span className="text-violet-500/70">·</span>
+                          <span className="text-violet-500/70 font-normal">{sub.fileName}</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => rerunAiReviewFor(sub.id)}
+                          disabled={aiRerunBy.has(sub.id) || !!aiRunningId}
+                          className="inline-flex items-center gap-1 px-2 py-1 text-[11px] text-violet-700 border border-violet-200 rounded hover:bg-violet-50 disabled:opacity-50"
+                        >
+                          {aiRerunBy.has(sub.id) ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+                          重新运行
+                        </button>
+                      </div>
+                      {aiHistoryLoading.has(sub.id) ? (
+                        <div className="px-3 py-4 text-xs text-gray-500 text-center">加载中…</div>
+                      ) : (aiHistory[sub.id] || []).length === 0 ? (
+                        <div className="px-3 py-4 text-xs text-gray-400 text-center">暂无评审记录</div>
+                      ) : (
+                        <div className="divide-y divide-gray-100">
+                          {(aiHistory[sub.id] || []).map((r, idx) => {
+                            const isLatest = idx === 0;
+                            const isOpen = aiReviewExpanded.has(r.id);
+                            return (
+                              <div key={r.id} className="px-3 py-2.5">
+                                <div className="flex flex-wrap items-center gap-2 text-xs">
+                                  <span className={`px-1.5 py-0.5 rounded font-semibold ${
+                                    r.status === 'success' ? 'bg-green-50 text-green-600 ring-1 ring-green-200/50' :
+                                    r.status === 'failed' ? 'bg-red-50 text-red-600 ring-1 ring-red-200/50' :
+                                    'bg-amber-50 text-amber-600 ring-1 ring-amber-200/50'
+                                  }`}>
+                                    {r.status === 'success' ? '成功' : r.status === 'failed' ? '失败' : '进行中'}
+                                  </span>
+                                  {r.parsedScore !== null && r.parsedScore !== undefined && (
+                                    <span className="px-1.5 py-0.5 rounded bg-primary-50 text-primary-600 ring-1 ring-primary-200/50 font-mono font-semibold">
+                                      AI 分数 {r.parsedScore}
+                                    </span>
+                                  )}
+                                  {r.applied && <span className="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200/50">已采纳</span>}
+                                  {isLatest && <span className="px-1.5 py-0.5 rounded bg-violet-100 text-violet-700">最新</span>}
+                                  <span className="text-gray-400 ml-auto">{formatDate(r.createdAt)}</span>
+                                </div>
+                                <div className="mt-1 text-[11px] text-gray-500 flex flex-wrap items-center gap-2">
+                                  <span className="font-mono">{r.model}</span>
+                                  <span>· 模式 {r.pdfMode}</span>
+                                  {r.latencyMs ? <span>· 耗时 {(r.latencyMs / 1000).toFixed(1)}s</span> : null}
+                                </div>
+                                {r.status === 'failed' && r.errorMessage && (
+                                  <div className="mt-1 text-[11px] text-red-600 bg-red-50 rounded px-2 py-1 whitespace-pre-wrap break-all">
+                                    {r.errorMessage}
+                                  </div>
+                                )}
+                                <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                                  <button type="button" onClick={() => toggleAiReviewDetail(r.id)}
+                                    className="px-2 py-0.5 text-[11px] bg-gray-50 text-gray-600 rounded hover:bg-gray-100">
+                                    {isOpen ? '收起详情' : '查看详情'}
+                                  </button>
+                                  {r.status === 'success' && !r.applied && (
+                                    <button type="button" onClick={() => applyAiReview(r.id, sub.id)}
+                                      disabled={aiReviewApplying.has(r.id)}
+                                      className="px-2 py-0.5 text-[11px] bg-emerald-50 text-emerald-600 rounded hover:bg-emerald-100 disabled:opacity-50">
+                                      {aiReviewApplying.has(r.id) ? '采纳中…' : '采纳为成绩'}
+                                    </button>
+                                  )}
+                                </div>
+                                {isOpen && (
+                                  <div className="mt-2 bg-gray-50/60 rounded p-2.5 text-[11px] space-y-2">
+                                    {!aiReviewDetails[r.id] ? (
+                                      <div className="text-gray-400 text-center py-2">加载详情…</div>
+                                    ) : aiReviewDetails[r.id].review ? (
+                                      <>
+                                        {aiReviewDetails[r.id].review.parsedSummary && (
+                                          <div>
+                                            <div className="font-semibold text-gray-500 mb-0.5">总体评价</div>
+                                            <p className="text-gray-800">{aiReviewDetails[r.id].review.parsedSummary}</p>
+                                          </div>
+                                        )}
+                                        {aiReviewDetails[r.id].review.parsedFeedback && (
+                                          <div>
+                                            <div className="font-semibold text-gray-500 mb-0.5">给作者的总评</div>
+                                            <p className="text-gray-800 whitespace-pre-wrap">{aiReviewDetails[r.id].review.parsedFeedback}</p>
+                                          </div>
+                                        )}
+                                        {aiReviewDetails[r.id].review.parsedDimensions && (() => {
+                                          try {
+                                            const d = JSON.parse(aiReviewDetails[r.id].review.parsedDimensions);
+                                            return (
+                                              <div>
+                                                <div className="font-semibold text-gray-500 mb-0.5">分维度评分</div>
+                                                <div className="grid sm:grid-cols-2 gap-1">
+                                                  {Object.entries(d).map(([k, v]: any) => (
+                                                    <div key={k} className="flex items-center justify-between bg-white rounded border border-gray-200 px-2 py-1">
+                                                      <span className="text-gray-700">{k}</span>
+                                                      <span className="font-mono font-semibold text-primary-600">{v as any}</span>
+                                                    </div>
+                                                  ))}
+                                                </div>
+                                              </div>
+                                            );
+                                          } catch { return null; }
+                                        })()}
+                                      </>
+                                    ) : null}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
                   )}
 
@@ -1779,6 +2166,9 @@ export default function AdminPage() {
           setMessage={setMessage}
         />
       )}
+
+      {/* ===== AI 评审配置 ===== */}
+      {tab === 'aiConfig' && <AiConfigPanel onMessage={setMessage} />}
 
       {/* ===== 管理员使用说明 ===== */}
       {tab === 'guide' && <AdminGuidePanel onMessage={setMessage} />}
@@ -2896,6 +3286,548 @@ function BackupPanel({ onMessage, canRestore }: { onMessage: (m: string) => void
           </>
         )}
       </div>
+    </div>
+  );
+}
+
+// ============== AI 评审配置 ==============
+function AiConfigPanel({ onMessage }: { onMessage: (m: string) => void }) {
+  const [loaded, setLoaded] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [showKey, setShowKey] = useState(false);
+  const [form, setForm] = useState({
+    baseUrl: 'https://api.openai.com/v1',
+    apiKey: '',
+    hasApiKey: false,
+    apiKeyMasked: '',
+    model: 'gpt-4o-mini',
+    pdfMode: 'text' as 'text' | 'file' | 'auto',
+    temperature: 0.2,
+    maxTokens: 2000,
+    timeoutMs: 120000,
+    systemPrompt: '',
+    userPromptTpl: '',
+    enabled: false,
+  });
+
+  // 预设管理
+  const [presets, setPresets] = useState<any[]>([]);
+  const [presetsLoading, setPresetsLoading] = useState(false);
+  const [presetFormOpen, setPresetFormOpen] = useState(false);
+  const [presetSaving, setPresetSaving] = useState(false);
+  const [presetApplyingId, setPresetApplyingId] = useState<string | null>(null);
+  const [presetForm, setPresetForm] = useState({
+    name: '',
+    description: '',
+    baseUrl: 'https://api.openai.com/v1',
+    apiKey: '',
+    model: 'gpt-4o-mini',
+    pdfMode: 'text' as 'text' | 'file' | 'auto',
+    temperature: 0.2,
+    maxTokens: 2000,
+    timeoutMs: 120000,
+  });
+
+  useEffect(() => {
+    fetch('/api/admin/ai-config', { cache: 'no-store' })
+      .then((r) => r.json())
+      .then((cfg) => {
+        setForm((f) => ({
+          ...f,
+          baseUrl: cfg.baseUrl || 'https://api.openai.com/v1',
+          hasApiKey: !!cfg.hasApiKey,
+          apiKeyMasked: cfg.apiKeyMasked || '',
+          apiKey: '',
+          model: cfg.model || 'gpt-4o-mini',
+          pdfMode: cfg.pdfMode || 'text',
+          temperature: typeof cfg.temperature === 'number' ? cfg.temperature : 0.2,
+          maxTokens: cfg.maxTokens || 2000,
+          timeoutMs: cfg.timeoutMs || 120000,
+          systemPrompt: cfg.systemPrompt || '',
+          userPromptTpl: cfg.userPromptTpl || '',
+          enabled: !!cfg.enabled,
+        }));
+        setLoaded(true);
+      })
+      .catch(() => setLoaded(true));
+  }, []);
+
+  const loadPresets = useCallback(async () => {
+    setPresetsLoading(true);
+    try {
+      const r = await fetch('/api/admin/ai-presets', { cache: 'no-store' });
+      const j = await r.json();
+      setPresets(Array.isArray(j.presets) ? j.presets : []);
+    } catch (e: any) { onMessage(e?.message || '加载预设失败'); }
+    finally { setPresetsLoading(false); }
+  }, [onMessage]);
+
+  useEffect(() => { if (loaded) loadPresets(); }, [loaded, loadPresets]);
+
+  const openPresetForm = () => {
+    setPresetForm({
+      name: '',
+      description: '',
+      baseUrl: form.baseUrl,
+      apiKey: '',
+      model: form.model,
+      pdfMode: form.pdfMode,
+      temperature: form.temperature,
+      maxTokens: form.maxTokens,
+      timeoutMs: form.timeoutMs,
+    });
+    setPresetFormOpen(true);
+  };
+
+  const savePreset = async () => {
+    if (!presetForm.name.trim()) { onMessage('预设名称必填'); return; }
+    if (!presetForm.baseUrl.trim()) { onMessage('baseUrl 必填'); return; }
+    if (!presetForm.model.trim()) { onMessage('model 必填'); return; }
+    setPresetSaving(true);
+    try {
+      const r = await fetch('/api/admin/ai-presets', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...presetForm,
+          systemPrompt: form.systemPrompt,
+          userPromptTpl: form.userPromptTpl,
+        }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) { onMessage(j.error || '保存预设失败'); return; }
+      onMessage('预设已保存');
+      setPresetFormOpen(false);
+      await loadPresets();
+    } catch (e: any) { onMessage(e?.message || '保存预设失败'); }
+    finally { setPresetSaving(false); }
+  };
+
+  const applyPreset = async (id: string) => {
+    if (!window.confirm('确认应用该预设？将覆盖当前 baseUrl / 模型 / 提示词等（不会清空当前 API Key，除非预设也提供了）')) return;
+    setPresetApplyingId(id);
+    try {
+      const r = await fetch(`/api/admin/ai-presets/${id}/apply`, { method: 'POST' });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) { onMessage(j.error || '应用预设失败'); return; }
+      onMessage('已应用预设，正在刷新配置…');
+      // 重新拉取当前配置
+      const cfgR = await fetch('/api/admin/ai-config', { cache: 'no-store' });
+      const cfg = await cfgR.json();
+      setForm((f) => ({
+        ...f,
+        baseUrl: cfg.baseUrl || 'https://api.openai.com/v1',
+        hasApiKey: !!cfg.hasApiKey,
+        apiKeyMasked: cfg.apiKeyMasked || '',
+        apiKey: '',
+        model: cfg.model || 'gpt-4o-mini',
+        pdfMode: cfg.pdfMode || 'text',
+        temperature: typeof cfg.temperature === 'number' ? cfg.temperature : 0.2,
+        maxTokens: cfg.maxTokens || 2000,
+        timeoutMs: cfg.timeoutMs || 120000,
+        systemPrompt: cfg.systemPrompt || '',
+        userPromptTpl: cfg.userPromptTpl || '',
+        enabled: !!cfg.enabled,
+      }));
+    } catch (e: any) { onMessage(e?.message || '应用预设失败'); }
+    finally { setPresetApplyingId(null); }
+  };
+
+  const deletePreset = async (p: any) => {
+    const isBuiltIn = !!p.isBuiltIn;
+    const confirmMsg = isBuiltIn
+      ? '该预设是内置预设，删除后可在列表点「恢复内置预设」重新生成。\n\n确认删除？'
+      : '确认删除该预设？';
+    if (!window.confirm(confirmMsg)) return;
+    try {
+      const url = isBuiltIn
+        ? `/api/admin/ai-presets/${p.id}?force=true`
+        : `/api/admin/ai-presets/${p.id}`;
+      const r = await fetch(url, { method: 'DELETE' });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) { onMessage(j.error || '删除失败'); return; }
+      onMessage('预设已删除');
+      await loadPresets();
+    } catch (e: any) { onMessage(e?.message || '删除失败'); }
+  };
+
+  const resetBuiltins = async () => {
+    if (!window.confirm('将根据代码重新生成已删除的内置预设。继续？')) return;
+    try {
+      const r = await fetch('/api/admin/ai-presets/builtin/reset', { method: 'POST' });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) { onMessage(j.error || '恢复失败'); return; }
+      onMessage(`已恢复 ${j.restored?.length || 0} 个内置预设，跳过 ${j.skipped || 0} 个已存在的`);
+      await loadPresets();
+    } catch (e: any) { onMessage(e?.message || '恢复失败'); }
+  };
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      const r = await fetch('/api/admin/ai-config', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          baseUrl: form.baseUrl,
+          apiKey: form.apiKey || undefined,
+          model: form.model,
+          pdfMode: form.pdfMode,
+          temperature: form.temperature,
+          maxTokens: form.maxTokens,
+          timeoutMs: form.timeoutMs,
+          systemPrompt: form.systemPrompt,
+          userPromptTpl: form.userPromptTpl,
+          enabled: form.enabled,
+        }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) { onMessage(j.error || '保存失败'); return; }
+      onMessage('AI 评审配置已保存');
+      setForm((f) => ({ ...f, hasApiKey: !!j.hasApiKey, apiKeyMasked: j.apiKeyMasked || '', apiKey: '' }));
+    } catch (e: any) { onMessage(e?.message || '保存失败'); }
+    finally { setSaving(false); }
+  };
+
+  if (!loaded) return <div className="text-center py-10 text-gray-500">加载中...</div>;
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center gap-3">
+        <Cpu className="w-5 h-5 text-primary-600" />
+        <div>
+          <h2 className="text-lg font-semibold">AI 评审配置</h2>
+          <p className="text-sm text-gray-500">配置 LLM 服务来对 PDF 论文进行自动评审</p>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-5">
+        <div className="flex items-center justify-between border-b pb-3">
+          <div>
+            <h3 className="font-medium text-gray-900">启用 AI 评审</h3>
+            <p className="text-xs text-gray-500 mt-0.5">关闭时即使点「AI 评审」按钮也会返回错误</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setForm({ ...form, enabled: !form.enabled })}
+            className={`px-4 py-1.5 rounded-lg text-sm font-medium border ${form.enabled ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-gray-50 text-gray-600 border-gray-200'}`}
+          >
+            {form.enabled ? '● 已启用' : '未启用'}
+          </button>
+        </div>
+
+        <div className="grid md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Base URL</label>
+            <input value={form.baseUrl} onChange={(e) => setForm({ ...form, baseUrl: e.target.value })}
+              placeholder="https://api.openai.com/v1"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 outline-none" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">模型</label>
+            <input value={form.model} onChange={(e) => setForm({ ...form, model: e.target.value })}
+              placeholder="gpt-4o-mini"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 outline-none" />
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">API Key</label>
+          <div className="flex gap-2">
+            <input
+              type={showKey ? 'text' : 'password'}
+              value={form.apiKey}
+              onChange={(e) => setForm({ ...form, apiKey: e.target.value })}
+              placeholder={form.hasApiKey ? `已设置（${form.apiKeyMasked}），输入新值覆盖` : 'sk-...'}
+              className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 outline-none font-mono"
+            />
+            <button type="button" onClick={() => setShowKey((s) => !s)}
+              className="px-3 py-2 border border-gray-300 rounded-lg text-sm hover:bg-gray-50">
+              {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+            </button>
+          </div>
+          <p className="text-xs text-gray-400 mt-1">仅 admin 角色可读写，前端只显示遮蔽值</p>
+        </div>
+
+        <div className="grid md:grid-cols-4 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">PDF 模式</label>
+            <select value={form.pdfMode} onChange={(e) => setForm({ ...form, pdfMode: e.target.value as any })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-primary-500 outline-none">
+              <option value="text">text（提取文本）</option>
+              <option value="file">file（直接传 PDF）</option>
+              <option value="auto">auto（按模型自动）</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Temperature</label>
+            <input type="number" step="0.1" min="0" max="2" value={form.temperature}
+              onChange={(e) => setForm({ ...form, temperature: Number(e.target.value) })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 outline-none" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Max Tokens</label>
+            <input type="number" min="100" max="8000" value={form.maxTokens}
+              onChange={(e) => setForm({ ...form, maxTokens: Number(e.target.value) })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 outline-none" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">超时 (ms)</label>
+            <input type="number" step="1000" min="30000" max="600000" value={form.timeoutMs}
+              onChange={(e) => setForm({ ...form, timeoutMs: Number(e.target.value) })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 outline-none" />
+            <p className="text-xs text-gray-400 mt-1">默认 120s；慢模型调到 180000+</p>
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">System Prompt</label>
+          <textarea value={form.systemPrompt} onChange={(e) => setForm({ ...form, systemPrompt: e.target.value })} rows={4}
+            placeholder="你是一名资深的数学建模竞赛评审专家..."
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 outline-none font-mono" />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">User Prompt 模板</label>
+          <textarea value={form.userPromptTpl} onChange={(e) => setForm({ ...form, userPromptTpl: e.target.value })} rows={6}
+            placeholder="支持占位符 {pdfContent} {fileName} {competition}"
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 outline-none font-mono" />
+        </div>
+
+        <div className="flex justify-end pt-2 border-t">
+          <button onClick={save} disabled={saving}
+            className="px-5 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700 disabled:opacity-50 flex items-center gap-1">
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+            保存配置
+          </button>
+        </div>
+
+        <div className="text-xs text-gray-400 flex items-center gap-1">
+          <span className="w-1.5 h-1.5 rounded-full bg-violet-500" />
+          AI 评审结果将出现在「提交评审」中各提交的卡片下方
+        </div>
+      </div>
+
+      {/* ===== 模型预设 ===== */}
+      <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Bookmark className="w-5 h-5 text-primary-600" />
+            <div>
+              <h3 className="font-medium text-gray-900">模型预设</h3>
+              <p className="text-xs text-gray-500 mt-0.5">把常用配置保存为预设，可一键应用到当前配置</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={resetBuiltins}
+              className="px-3 py-1.5 text-xs text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 flex items-center gap-1"
+              title="根据代码重新生成已删除的内置预设"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              恢复内置预设
+            </button>
+            <button
+              type="button"
+              onClick={openPresetForm}
+              className="px-3 py-1.5 text-xs bg-primary-600 text-white rounded-lg hover:bg-primary-700 flex items-center gap-1"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              保存当前为预设
+            </button>
+          </div>
+        </div>
+
+        {presetsLoading ? (
+          <div className="text-center text-xs text-gray-400 py-6">加载中…</div>
+        ) : presets.length === 0 ? (
+          <div className="text-center text-xs text-gray-400 py-6 border border-dashed border-gray-200 rounded-lg">
+            暂无预设，可点击「保存当前为预设」创建第一个
+          </div>
+        ) : (
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+            {presets.map((p: any) => (
+              <div key={p.id} className="border border-gray-200 rounded-lg p-3 hover:border-primary-300 hover:shadow-sm transition group">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5">
+                      <h4 className="font-medium text-sm text-gray-900 truncate">{p.name}</h4>
+                      {p.isBuiltIn && (
+                        <span className="px-1.5 py-0.5 rounded text-[10px] bg-amber-50 text-amber-700 ring-1 ring-amber-200/60">内置</span>
+                      )}
+                    </div>
+                    {p.description && (
+                      <p className="text-[11px] text-gray-500 mt-0.5 line-clamp-2">{p.description}</p>
+                    )}
+                  </div>
+                </div>
+                <div className="mt-2 grid grid-cols-2 gap-x-2 gap-y-0.5 text-[11px] text-gray-500">
+                  <div className="truncate" title={p.model}>
+                    <span className="text-gray-400">模型：</span>
+                    <span className="font-mono">{p.model}</span>
+                  </div>
+                  <div className="truncate" title={p.baseUrl}>
+                    <span className="text-gray-400">Base：</span>
+                    <span className="font-mono">{(() => { try { return new URL(p.baseUrl).host; } catch { return p.baseUrl; } })()}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-400">模式：</span>{p.pdfMode}
+                  </div>
+                  <div>
+                    <span className="text-gray-400">超时：</span>{(p.timeoutMs / 1000).toFixed(0)}s
+                  </div>
+                </div>
+                <div className="mt-2.5 flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => applyPreset(p.id)}
+                    disabled={presetApplyingId === p.id}
+                    className="flex-1 inline-flex items-center justify-center gap-1 px-2 py-1.5 text-[11px] bg-primary-50 text-primary-600 rounded hover:bg-primary-100 disabled:opacity-50"
+                  >
+                    {presetApplyingId === p.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+                    应用此预设
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => deletePreset(p)}
+                    className="inline-flex items-center justify-center px-2 py-1.5 text-[11px] text-red-600 border border-red-100 rounded hover:bg-red-50"
+                    title={p.isBuiltIn ? '删除内置预设（需确认）' : '删除预设'}
+                  >
+                    <Trash2 className="w-3 h-3" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="text-[11px] text-gray-400">
+          「应用此预设」会把 baseUrl / 模型 / 提示词等写入当前配置（不会清空 API Key，除非预设本身提供了新的 Key）。
+        </div>
+      </div>
+
+      {/* ===== 新建预设弹窗 ===== */}
+      {presetFormOpen && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => !presetSaving && setPresetFormOpen(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+              <div>
+                <h3 className="font-semibold text-gray-900">保存为新预设</h3>
+                <p className="text-xs text-gray-500 mt-0.5">会预填当前配置，可在保存前调整</p>
+              </div>
+              <button onClick={() => setPresetFormOpen(false)} disabled={presetSaving} className="p-1.5 rounded hover:bg-gray-100 text-gray-400">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="px-5 py-4 space-y-3 overflow-y-auto">
+              <div className="grid md:grid-cols-2 gap-3">
+                <div className="md:col-span-2">
+                  <label className="block text-xs font-medium text-gray-700 mb-1">预设名称 *</label>
+                  <input
+                    value={presetForm.name}
+                    onChange={(e) => setPresetForm({ ...presetForm, name: e.target.value })}
+                    placeholder="例如：DeepSeek 备用 / GPT-4o 主评审"
+                    maxLength={60}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 outline-none"
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-xs font-medium text-gray-700 mb-1">说明</label>
+                  <input
+                    value={presetForm.description}
+                    onChange={(e) => setPresetForm({ ...presetForm, description: e.target.value })}
+                    placeholder="可选，便于团队辨识"
+                    maxLength={200}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Base URL *</label>
+                  <input
+                    value={presetForm.baseUrl}
+                    onChange={(e) => setPresetForm({ ...presetForm, baseUrl: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">模型 *</label>
+                  <input
+                    value={presetForm.model}
+                    onChange={(e) => setPresetForm({ ...presetForm, model: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 outline-none"
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-xs font-medium text-gray-700 mb-1">API Key（可选）</label>
+                  <input
+                    type="password"
+                    value={presetForm.apiKey}
+                    onChange={(e) => setPresetForm({ ...presetForm, apiKey: e.target.value })}
+                    placeholder="留空则不写入预设；应用时不覆盖当前 Key"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 outline-none font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">PDF 模式</label>
+                  <select
+                    value={presetForm.pdfMode}
+                    onChange={(e) => setPresetForm({ ...presetForm, pdfMode: e.target.value as any })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-primary-500 outline-none"
+                  >
+                    <option value="text">text（提取文本）</option>
+                    <option value="file">file（直接传 PDF）</option>
+                    <option value="auto">auto（按模型自动）</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Temperature</label>
+                  <input
+                    type="number" step="0.1" min="0" max="2" value={presetForm.temperature}
+                    onChange={(e) => setPresetForm({ ...presetForm, temperature: Number(e.target.value) })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Max Tokens</label>
+                  <input
+                    type="number" min="100" max="8000" value={presetForm.maxTokens}
+                    onChange={(e) => setPresetForm({ ...presetForm, maxTokens: Number(e.target.value) })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">超时 (ms)</label>
+                  <input
+                    type="number" step="1000" min="30000" max="600000" value={presetForm.timeoutMs}
+                    onChange={(e) => setPresetForm({ ...presetForm, timeoutMs: Number(e.target.value) })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 outline-none"
+                  />
+                </div>
+              </div>
+              <div className="text-[11px] text-gray-400 bg-gray-50 rounded px-2.5 py-1.5">
+                提示词（systemPrompt / userPromptTpl）会沿用当前正在编辑的「系统提示词」「用户提示词」中的内容；如需为预设单独保存自定义提示词，可先在配置区调整后再保存。
+              </div>
+            </div>
+            <div className="px-5 py-3 border-t border-gray-100 flex items-center justify-end gap-2 bg-gray-50/50">
+              <button
+                type="button"
+                onClick={() => setPresetFormOpen(false)}
+                disabled={presetSaving}
+                className="px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded-lg disabled:opacity-50"
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                onClick={savePreset}
+                disabled={presetSaving}
+                className="px-4 py-1.5 bg-primary-600 text-white text-sm rounded-lg hover:bg-primary-700 disabled:opacity-50 flex items-center gap-1"
+              >
+                {presetSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                保存预设
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

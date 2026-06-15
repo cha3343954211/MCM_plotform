@@ -34,7 +34,14 @@ export async function GET() {
     notifications,
     loginLogs,
   ] = await Promise.all([
-    prisma.user.findMany(),
+    // 显式 select 排除 password 等敏感字段，避免 bcrypt 哈希跟着备份一起外泄
+    prisma.user.findMany({
+      select: {
+        id: true, name: true, email: true, role: true,
+        school: true, studentId: true, phone: true,
+        createdAt: true, updatedAt: true,
+      },
+    }),
     prisma.siteConfig.findMany(),
     (prisma as any).guideDoc.findMany(),
     prisma.competition.findMany(),
@@ -48,7 +55,10 @@ export async function GET() {
     (prisma as any).showcaseLike.findMany(),
     (prisma as any).judgeScore.findMany(),
     (prisma as any).notification.findMany(),
-    (prisma as any).loginLog.findMany(),
+    // loginLog 含 IP/UA，导出时仅保留 email/success/原因，去掉 IP
+    (prisma as any).loginLog.findMany({
+      select: { id: true, email: true, success: true, reason: true, userId: true, createdAt: true },
+    }),
   ]);
 
   const payload = {
@@ -131,6 +141,11 @@ export async function POST(req: NextRequest) {
     return row;
   };
 
+  // 备份中不包含用户密码字段（避免敏感信息外泄），导入时为每个用户生成随机占位密码，
+  // 管理员需要通过用户管理界面通知用户重置密码。注意：该变量需在事务外声明。
+  const crypto = await import('crypto');
+  const tempPasswords: Array<{ email: string; name: string }> = [];
+
   try {
     await prisma.$transaction(async (tx: any) => {
       // ---- 反向 FK 顺序清空 ----
@@ -153,8 +168,15 @@ export async function POST(req: NextRequest) {
       await tx.user.deleteMany({});
 
       // ---- FK 顺序写入 ----
+      // 用户在备份中不包含 password 字段（避免敏感信息外泄），导入时生成随机占位密码。
+      // tempPasswords 已在事务外声明，这里直接 push 即可。
       for (const u of arr('users')) {
-        await tx.user.create({ data: mapDates({ ...u }, ['createdAt', 'updatedAt']) });
+        const { password: _ignored, ...safeUser } = u;
+        const tempPwd = crypto.randomBytes(12).toString('base64url');
+        await tx.user.create({
+          data: mapDates({ ...safeUser, password: tempPwd }, ['createdAt', 'updatedAt']),
+        });
+        tempPasswords.push({ email: u.email, name: u.name });
       }
       for (const s of arr('siteConfig')) {
         await tx.siteConfig.create({ data: mapDates({ ...s }, ['updatedAt']) });
@@ -228,5 +250,8 @@ export async function POST(req: NextRequest) {
       submissions: arr('submissions').length,
       teams: arr('teams').length,
     },
+    notice: tempPasswords.length > 0
+      ? `已为 ${tempPasswords.length} 个用户生成临时密码，请尽快通知其重置密码`
+      : undefined,
   });
 }

@@ -127,7 +127,9 @@ export default function MySubmissionsPage() {
                   </Link>
                 </div>
               )}
-              <p className="text-xs text-gray-300 mt-1">提交时间: {formatDate(sub.createdAt)}</p>
+              {config.showSubmissionTime !== false && (
+                <p className="text-xs text-gray-300 mt-1">提交时间: {formatDate(sub.createdAt)}</p>
+              )}
 
               {sub.score !== null && sub.score !== undefined && (
                 <div className="mt-3 p-4 rounded-2xl" style={{ background: `${config.primaryColor}08` }}>

@@ -89,17 +89,33 @@ export async function PATCH(request: NextRequest) {
   }
 
   if (requestRow.team.competition.status === 'ended') return NextResponse.json({ error: '赛题已结束' }, { status: 400 });
-  if (requestRow.team.members.length >= requestRow.team.maxMembers) return NextResponse.json({ error: '团队已满员' }, { status: 400 });
 
-  const existingMembership = await (prisma as any).teamMember.findFirst({
-    where: { userId: requestRow.userId, team: { competitionId: requestRow.team.competitionId } },
-  });
-  if (existingMembership) return NextResponse.json({ error: '申请人已加入该赛题下的团队' }, { status: 400 });
-
-  await prisma.$transaction([
-    (prisma as any).teamMember.create({ data: { teamId: requestRow.teamId, userId: requestRow.userId, role: 'member' } }),
-    (prisma as any).teamJoinRequest.update({ where: { id }, data: { status: 'approved' } }),
-  ]);
+  // 事务化「校验满员/重复 + 写入成员 + 更新申请状态」避免并发审核导致超员或重复加入
+  try {
+    await prisma.$transaction(async (tx: any) => {
+      const memberCount = await tx.teamMember.count({ where: { teamId: requestRow.teamId } });
+      if (memberCount >= requestRow.team.maxMembers) {
+        const e: any = new Error('团队已满员');
+        e.status = 400;
+        throw e;
+      }
+      const existingMembership = await tx.teamMember.findFirst({
+        where: { userId: requestRow.userId, team: { competitionId: requestRow.team.competitionId } },
+      });
+      if (existingMembership) {
+        const e: any = new Error('申请人已加入该赛题下的团队');
+        e.status = 400;
+        throw e;
+      }
+      await tx.teamMember.create({ data: { teamId: requestRow.teamId, userId: requestRow.userId, role: 'member' } });
+      await tx.teamJoinRequest.update({ where: { id }, data: { status: 'approved' } });
+    });
+  } catch (e: any) {
+    return NextResponse.json(
+      { error: e?.message || '审核失败' },
+      { status: e?.status || 500 }
+    );
+  }
 
   await (prisma as any).notification.create({
     data: { userId: requestRow.userId, type: 'system', title: '入队申请已通过', content: `你已加入团队《${requestRow.team.name}》`, link: '/teams' },

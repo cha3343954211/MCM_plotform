@@ -38,6 +38,12 @@ function isRateLimited(key: string, limit: number, windowMs: number): boolean {
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
+  // 管理员路径不限流：/api/admin/* 只有 admin/super_admin 可访问，
+  // 而且管理后台初始化会并发拉取 N+4 个 API（提交、AI 评审等），常规限流容易误伤。
+  if (pathname.startsWith('/api/admin/')) {
+    return NextResponse.next();
+  }
+
   // Rate limit auth endpoints more strictly
   if (pathname === '/api/register' || pathname === '/api/auth/callback/credentials') {
     const key = `auth:${getRateLimitKey(request)}`;
@@ -49,10 +55,10 @@ export function middleware(request: NextRequest) {
     }
   }
 
-  // General API rate limit
+  // General API rate limit（公共接口：登录用户每秒可触发多次刷新）
   if (pathname.startsWith('/api/') && pathname !== '/api/health') {
     const key = `api:${getRateLimitKey(request)}`;
-    if (isRateLimited(key, 100, 60_000)) {
+    if (isRateLimited(key, 300, 60_000)) {
       return NextResponse.json(
         { error: '请求过于频繁，请稍后再试' },
         { status: 429 }

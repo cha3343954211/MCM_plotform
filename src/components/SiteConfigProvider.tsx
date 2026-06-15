@@ -16,6 +16,9 @@ export interface SiteConfig {
   bannerText: string | null;
   bannerEnabled: boolean;
   maxFileSize: number;
+  maxSubmissionVersions: number;
+  commentsEnabled: boolean;
+  showSubmissionTime: boolean;
 }
 
 const defaultConfig: SiteConfig = {
@@ -32,6 +35,9 @@ const defaultConfig: SiteConfig = {
   bannerText: null,
   bannerEnabled: false,
   maxFileSize: 10,
+  maxSubmissionVersions: 5,
+  commentsEnabled: true,
+  showSubmissionTime: true,
 };
 
 const SiteConfigContext = createContext<{ config: SiteConfig; refresh: () => void }>({

@@ -74,6 +74,7 @@ model SiteConfig {
   maxFileSize Int    @default(10)
   maxSubmissionVersions Int @default(5) // 截止前重交保留的最近版本数上限
   commentsEnabled Boolean @default(true) // 公示作品是否开放评论与点赞
+  showSubmissionTime Boolean @default(true) // 是否显示结果提交时间
   updatedAt DateTime @updatedAt
 }
 
@@ -251,4 +252,82 @@ model JudgeScore {
 
   @@unique([submissionId, judgeId])
   @@index([judgeId])
+}
+
+// =============== AI 评审 ===============
+// 单行配置：管理员在后台维护 AI 服务连接信息
+model AiConfig {
+  id              String   @id @default("default")
+  enabled         Boolean  @default(false)
+  baseUrl         String   @default("https://api.openai.com/v1")
+  apiKey          String?  // 管理员设置后回显时会被遮蔽
+  model           String   @default("gpt-4o-mini")
+  // text: 服务端解析 PDF 文本后塞进 prompt；file: 把 PDF 直接作为多模态输入；auto: 模型支持就 file，否则降级 text
+  pdfMode         String   @default("text")
+  temperature     Float    @default(0.2)
+  maxTokens       Int      @default(2000)
+  timeoutMs       Int      @default(90000)
+  systemPrompt    String   @default("你是一名资深的数学建模竞赛评审专家。请基于赛题要求和参赛论文，公正、专业、具体地评审论文质量。")
+  userPromptTpl   String   @default("## 赛题信息\n\n{competition}\n\n## 参赛论文（{fileName}）\n\n{pdfContent}\n\n请按以下 JSON 结构返回评审结果：\n{\n  \"score\": 0-100 的整数或一位小数，代表综合得分,\n  \"summary\": \"对论文的总体评价，2-4 句话\",\n  \"strengths\": [\"亮点1\", \"亮点2\", ...],\n  \"weaknesses\": [\"不足1\", \"不足2\", ...],\n  \"suggestions\": [\"改进建议1\", ...],\n  \"dimensions\": {\n    \"建模质量\": 0-100,\n    \"求解方法\": 0-100,\n    \"结果分析\": 0-100,\n    \"论文表达\": 0-100\n  },\n  \"feedback\": \"一段话写给参赛者的总评，会展示在管理后台\"\n}\n只返回合法 JSON，不要包裹 ``` 代码块。")
+  updatedBy       String?
+  updatedAt       DateTime @updatedAt
+  createdAt       DateTime @default(now())
+}
+
+// 每次 AI 评审执行记录
+model AiReview {
+  id              String   @id @default(cuid())
+  submissionId    String
+  competitionId   String
+  userId          String   // 论文作者
+  triggeredBy     String   // 触发此次评审的管理员 id
+  status          String   @default("pending") // "pending" | "success" | "failed"
+  model           String
+  pdfMode         String
+  baseUrl         String?
+  requestSummary  String?  // 请求摘要：是否带 PDF、PDF 长度等
+  rawResponse     String?  // 模型原始返回（截断到 8000 字符）
+  parsedScore     Float?
+  parsedSummary   String?
+  parsedFeedback  String?  // 给作者看的总评
+  parsedDimensions String? // JSON: {建模质量: 85, ...}
+  parsedJson      String?  // 完整解析后的 JSON
+  errorMessage    String?
+  latencyMs       Int?
+  inputTokens     Int?
+  outputTokens    Int?
+  // 采纳
+  applied         Boolean  @default(false)
+  appliedBy       String?
+  appliedAt       DateTime?
+  createdAt       DateTime @default(now())
+
+  @@index([submissionId])
+  @@index([competitionId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+// AI 评审配置预设：管理员可保存多份模型配置（如 OpenAI / DeepSeek / Ollama）
+// 一键应用到当前 AiConfig；带 isBuiltIn 标识内置预设不可删
+model AiConfigPreset {
+  id              String   @id @default(cuid())
+  name            String   // 预设名称（如 "OpenAI gpt-4o-mini"）
+  description     String?  // 备注
+  baseUrl         String
+  apiKey          String?  // 不存密文，存管理员输入的明文（与 AiConfig 一致）
+  model           String
+  pdfMode         String   @default("text")
+  temperature     Float    @default(0.2)
+  maxTokens       Int      @default(2000)
+  timeoutMs       Int      @default(120000)
+  systemPrompt    String
+  userPromptTpl   String
+  isBuiltIn       Boolean  @default(false) // 内置预设不允许删除/编辑
+  createdBy       String?  // 创建者
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([isBuiltIn])
+  @@index([createdAt])
 }

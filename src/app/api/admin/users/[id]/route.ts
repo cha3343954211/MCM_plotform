@@ -76,8 +76,20 @@ export async function DELETE(
       try { await unlink(path.join(process.cwd(), 'public', sub.filePath)); } catch {}
     }
 
-    await prisma.submission.deleteMany({ where: { userId: params.id } });
-    await prisma.user.delete({ where: { id: params.id } });
+    // 事务化：清空 submission 后删 user，避免 FK RESTRICT 失败时残留脏数据
+    try {
+      await prisma.$transaction([
+        prisma.submission.deleteMany({ where: { userId: params.id } }),
+        // 团队关联以 Cascade 自动清理（leaderId/TeamMember/TeamJoinRequest 均为 Cascade）
+        prisma.user.delete({ where: { id: params.id } }),
+      ]);
+    } catch (e: any) {
+      // 兜底：若 user 持有 RESTRICT 关系（例如其他系统表），则明确报错
+      return NextResponse.json(
+        { error: '删除用户失败：' + (e?.message || '存在关联数据无法删除') },
+        { status: 500 }
+      );
+    }
     return NextResponse.json({ message: '删除成功' });
   } catch (error) {
     return NextResponse.json({ error: '删除用户失败' }, { status: 500 });

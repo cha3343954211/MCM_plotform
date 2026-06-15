@@ -313,7 +313,9 @@ export default function CompetitionDetailPage() {
                   </div>
                   {sub.teamName && <p className="text-sm text-gray-400">团队: {sub.teamName}</p>}
                   {isAdminRole(session.user.role) && <p className="text-sm text-gray-400">提交者: {sub.user?.name} ({sub.user?.email})</p>}
-                  <p className="text-xs text-gray-300 mt-1">提交时间: {formatDate(sub.createdAt)}</p>
+                  {(config.showSubmissionTime !== false || isAdminRole(session.user.role)) && (
+                    <p className="text-xs text-gray-300 mt-1">提交时间: {formatDate(sub.createdAt)}</p>
+                  )}
                   {sub.score !== null && sub.score !== undefined && (
                     <div className="mt-2 p-3 rounded-2xl" style={{ background: `${config.primaryColor}08` }}>
                       <p className="text-sm font-semibold" style={{ color: config.primaryColor }}>成绩: {sub.score} 分</p>

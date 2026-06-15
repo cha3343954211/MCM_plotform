@@ -73,11 +73,15 @@ export async function DELETE(request: NextRequest) {
     }
 
     const { filePath } = await request.json();
-    if (!filePath || !filePath.startsWith('/uploads/')) {
+    if (!filePath || typeof filePath !== 'string') {
       return NextResponse.json({ error: '无效的文件路径' }, { status: 400 });
     }
-
-    const fullPath = path.join(process.cwd(), 'public', filePath);
+    // 安全：限定在 /uploads/ 之内，且归一化后必须仍在 uploads 根下
+    const uploadsRoot = path.resolve(process.cwd(), 'public', 'uploads');
+    const fullPath = path.resolve(uploadsRoot, filePath.replace(/^[/\\]+/, ''));
+    if (!fullPath.startsWith(uploadsRoot + path.sep) && fullPath !== uploadsRoot) {
+      return NextResponse.json({ error: '禁止访问该路径' }, { status: 403 });
+    }
     await unlink(fullPath);
 
     return NextResponse.json({ message: '删除成功' });
