@@ -21,6 +21,19 @@ function toDatetimeLocal(value: string | Date) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
+// 统一处理 fetch 响应：空 body / 非 JSON / HTTP 错误都不抛异常，避免 "Unexpected end of JSON input"
+async function safeJson(r: Response): Promise<{ ok: boolean; status: number; data: any; raw: string }> {
+  const text = await r.text().catch(() => '');
+  let data: any = {};
+  if (text) {
+    try { data = JSON.parse(text); }
+    catch { data = { error: `返回非 JSON（HTTP ${r.status}）：${text.slice(0, 200)}` }; }
+  } else {
+    data = { error: `空响应（HTTP ${r.status}，请检查 dev server 是否在运行）` };
+  }
+  return { ok: r.ok, status: r.status, data, raw: text };
+}
+
 export default function AdminPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
@@ -100,14 +113,12 @@ export default function AdminPage() {
   }, [showMoreTabs]);
 
   const loadCompetitions = useCallback(async () => {
-    const res = await fetch('/api/competitions', { cache: 'no-store' });
-    const data = await res.json();
+    const { data } = await safeJson(await fetch('/api/competitions', { cache: 'no-store' }));
     setCompetitions(Array.isArray(data) ? data : []);
   }, []);
 
   const loadSubmissions = useCallback(async () => {
-    const res = await fetch('/api/submissions', { cache: 'no-store' });
-    const data = await res.json();
+    const { data } = await safeJson(await fetch('/api/submissions', { cache: 'no-store' }));
     setSubmissions(Array.isArray(data) ? data : []);
   }, []);
 
@@ -117,9 +128,8 @@ export default function AdminPage() {
     if (!force && aiHistory[submissionId]) return;
     setAiHistoryLoading((s) => new Set(s).add(submissionId));
     try {
-      const r = await fetch(`/api/admin/ai-reviews?submissionId=${encodeURIComponent(submissionId)}&limit=50`, { cache: 'no-store' });
-      const j = await r.json();
-      setAiHistory((m) => ({ ...m, [submissionId]: j.reviews || [] }));
+      const { data: j } = await safeJson(await fetch(`/api/admin/ai-reviews?submissionId=${encodeURIComponent(submissionId)}&limit=50`, { cache: 'no-store' }));
+      setAiHistory((m) => ({ ...m, [submissionId]: (j && j.reviews) || [] }));
     } finally {
       setAiHistoryLoading((s) => { const next = new Set(s); next.delete(submissionId); return next; });
     }
@@ -131,9 +141,8 @@ export default function AdminPage() {
     try {
       // 单次请求拿所有最新记录（最多 500）
       const ids = subs.map((s) => s.id).filter(Boolean);
-      const r = await fetch(`/api/admin/ai-reviews/latest?submissionIds=${encodeURIComponent(ids.join(','))}`, { cache: 'no-store' });
-      const j = await r.json().catch(() => ({}));
-      const latest: Record<string, any> = j.latest || {};
+      const { data: j } = await safeJson(await fetch(`/api/admin/ai-reviews/latest?submissionIds=${encodeURIComponent(ids.join(','))}`, { cache: 'no-store' }));
+      const latest: Record<string, any> = (j && j.latest) || {};
       const next: Record<string, any> = {};
       for (const s of subs) {
         const row = latest[s.id];
@@ -144,31 +153,27 @@ export default function AdminPage() {
   }, []);
 
   const loadUsers = useCallback(async () => {
-    const res = await fetch('/api/admin/users', { cache: 'no-store' });
-    const data = await res.json();
+    const { data } = await safeJson(await fetch('/api/admin/users', { cache: 'no-store' }));
     setUsers(Array.isArray(data) ? data : []);
   }, []);
 
   const loadTeams = useCallback(async () => {
-    const res = await fetch('/api/teams?admin=1', { cache: 'no-store' });
-    const data = await res.json();
+    const { data } = await safeJson(await fetch('/api/teams?admin=1', { cache: 'no-store' }));
     setTeams(Array.isArray(data) ? data : []);
   }, []);
 
   const loadFiles = useCallback(async () => {
-    const res = await fetch('/api/admin/files', { cache: 'no-store' });
-    setFiles(await res.json());
+    const { data } = await safeJson(await fetch('/api/admin/files', { cache: 'no-store' }));
+    setFiles(data || { files: [], totalSize: 0, totalCount: 0 });
   }, []);
 
   const loadAnnouncements = useCallback(async () => {
-    const res = await fetch('/api/announcements?all=true', { cache: 'no-store' });
-    const data = await res.json();
+    const { data } = await safeJson(await fetch('/api/announcements?all=true', { cache: 'no-store' }));
     setAnnouncements(Array.isArray(data) ? data : []);
   }, []);
 
   const loadLoginLogs = useCallback(async () => {
-    const res = await fetch('/api/admin/login-logs', { cache: 'no-store' });
-    const data = await res.json();
+    const { data } = await safeJson(await fetch('/api/admin/login-logs', { cache: 'no-store' }));
     setLoginLogs(Array.isArray(data) ? data : []);
   }, []);
 
@@ -3337,45 +3342,36 @@ function AiConfigPanel({ onMessage }: { onMessage: (m: string) => void }) {
   });
 
   useEffect(() => {
-    fetch('/api/admin/ai-config', { cache: 'no-store' })
-      .then(async (r) => {
-        // 处理空 body / 非 200
-        const text = await r.text();
-        if (!r.ok) throw new Error(text || `HTTP ${r.status}`);
-        if (!text) throw new Error('空响应（可能 dev server 未运行或编译错误）');
-        return JSON.parse(text);
-      })
-      .then((cfg) => {
-        if (!cfg || typeof cfg !== 'object') throw new Error('返回数据格式错误');
-        setForm((f) => ({
-          ...f,
-          baseUrl: cfg.baseUrl || 'https://api.openai.com/v1',
-          hasApiKey: !!cfg.hasApiKey,
-          apiKeyMasked: cfg.apiKeyMasked || '',
-          apiKey: '',
-          model: cfg.model || 'gpt-4o-mini',
-          pdfMode: cfg.pdfMode || 'text',
-          temperature: typeof cfg.temperature === 'number' ? cfg.temperature : 0.2,
-          maxTokens: cfg.maxTokens || 2000,
-          timeoutMs: cfg.timeoutMs || 120000,
-          systemPrompt: cfg.systemPrompt || '',
-          userPromptTpl: cfg.userPromptTpl || '',
-          enabled: !!cfg.enabled,
-        }));
-        setLoaded(true);
-      })
-      .catch((e) => {
-        onMessage('加载 AI 配置失败：' + (e?.message || '未知错误'));
-        setLoaded(true);
-      });
+    (async () => {
+      const { ok, data: cfg, raw } = await safeJson(await fetch('/api/admin/ai-config', { cache: 'no-store' }));
+      if (!ok) { onMessage('加载 AI 配置失败：' + (cfg?.error || raw || `HTTP 错误`)); setLoaded(true); return; }
+      if (!cfg || typeof cfg !== 'object') { onMessage('加载 AI 配置失败：返回数据格式错误'); setLoaded(true); return; }
+      setForm((f) => ({
+        ...f,
+        baseUrl: cfg.baseUrl || 'https://api.openai.com/v1',
+        hasApiKey: !!cfg.hasApiKey,
+        apiKeyMasked: cfg.apiKeyMasked || '',
+        apiKey: '',
+        model: cfg.model || 'gpt-4o-mini',
+        pdfMode: cfg.pdfMode || 'text',
+        temperature: typeof cfg.temperature === 'number' ? cfg.temperature : 0.2,
+        maxTokens: cfg.maxTokens || 2000,
+        timeoutMs: cfg.timeoutMs || 120000,
+        systemPrompt: cfg.systemPrompt || '',
+        userPromptTpl: cfg.userPromptTpl || '',
+        enabled: !!cfg.enabled,
+      }));
+      setLoaded(true);
+    })();
   }, [onMessage]);
 
   const loadPresets = useCallback(async () => {
     setPresetsLoading(true);
     try {
       const r = await fetch('/api/admin/ai-presets', { cache: 'no-store' });
-      const j = await r.json();
+      const j = await r.json().catch(() => ({}));
       setPresets(Array.isArray(j.presets) ? j.presets : []);
+      if (!r.ok) onMessage(j.error || '加载预设失败');
     } catch (e: any) { onMessage(e?.message || '加载预设失败'); }
     finally { setPresetsLoading(false); }
   }, [onMessage]);
@@ -3430,7 +3426,7 @@ function AiConfigPanel({ onMessage }: { onMessage: (m: string) => void }) {
       onMessage('已应用预设，正在刷新配置…');
       // 重新拉取当前配置
       const cfgR = await fetch('/api/admin/ai-config', { cache: 'no-store' });
-      const cfg = await cfgR.json();
+      const cfg = await cfgR.json().catch(() => ({}));
       setForm((f) => ({
         ...f,
         baseUrl: cfg.baseUrl || 'https://api.openai.com/v1',
@@ -3482,7 +3478,7 @@ function AiConfigPanel({ onMessage }: { onMessage: (m: string) => void }) {
   const save = async () => {
     setSaving(true);
     try {
-      const r = await fetch('/api/admin/ai-config', {
+      const { ok, data: j } = await safeJson(await fetch('/api/admin/ai-config', {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           baseUrl: form.baseUrl,
@@ -3496,18 +3492,10 @@ function AiConfigPanel({ onMessage }: { onMessage: (m: string) => void }) {
           userPromptTpl: form.userPromptTpl,
           enabled: form.enabled,
         }),
-      });
-      // 防御：空 body / HTML 错误页（dev server 编译失败时会返回 HTML）
-      const text = await r.text();
-      let j: any = {};
-      if (text) {
-        try { j = JSON.parse(text); } catch { j = { error: `返回非 JSON（HTTP ${r.status}）：${text.slice(0, 120)}` }; }
-      } else {
-        j = { error: `空响应（HTTP ${r.status}，请检查 dev server 是否在运行）` };
-      }
-      if (!r.ok) { onMessage(j.error || '保存失败'); return; }
+      }));
+      if (!ok) { onMessage(j?.error || '保存失败'); return; }
       onMessage('AI 评审配置已保存');
-      setForm((f) => ({ ...f, hasApiKey: !!j.hasApiKey, apiKeyMasked: j.apiKeyMasked || '', apiKey: '' }));
+      setForm((f) => ({ ...f, hasApiKey: !!j?.hasApiKey, apiKeyMasked: j?.apiKeyMasked || '', apiKey: '' }));
     } catch (e: any) { onMessage('保存失败：' + (e?.message || '未知错误')); }
     finally { setSaving(false); }
   };
@@ -3520,11 +3508,10 @@ function AiConfigPanel({ onMessage }: { onMessage: (m: string) => void }) {
     try {
       const params = new URLSearchParams({ baseUrl: form.baseUrl });
       if (form.apiKey) params.set('apiKey', form.apiKey);
-      const r = await fetch(`/api/admin/ai-config/models?${params.toString()}`, { cache: 'no-store' });
-      const j = await r.json().catch(() => ({}));
-      const list: string[] = Array.isArray(j.models) ? j.models : [];
+      const { data: j } = await safeJson(await fetch(`/api/admin/ai-config/models?${params.toString()}`, { cache: 'no-store' }));
+      const list: string[] = Array.isArray(j?.models) ? j.models : [];
       if (list.length === 0) {
-        onMessage(j.error || '未能拉取到模型，请检查 Base URL / API Key');
+        onMessage(j?.error || '未能拉取到模型，请检查 Base URL / API Key');
         setModelList([]);
         return;
       }
@@ -3546,11 +3533,10 @@ function AiConfigPanel({ onMessage }: { onMessage: (m: string) => void }) {
     try {
       const params = new URLSearchParams({ baseUrl: presetForm.baseUrl });
       if (presetForm.apiKey) params.set('apiKey', presetForm.apiKey);
-      const r = await fetch(`/api/admin/ai-config/models?${params.toString()}`, { cache: 'no-store' });
-      const j = await r.json().catch(() => ({}));
-      const list: string[] = Array.isArray(j.models) ? j.models : [];
+      const { data: j } = await safeJson(await fetch(`/api/admin/ai-config/models?${params.toString()}`, { cache: 'no-store' }));
+      const list: string[] = Array.isArray(j?.models) ? j.models : [];
       if (list.length === 0) {
-        onMessage(j.error || '未能拉取到模型，请检查 Base URL / API Key');
+        onMessage(j?.error || '未能拉取到模型，请检查 Base URL / API Key');
         setPresetModelList([]);
         return;
       }
