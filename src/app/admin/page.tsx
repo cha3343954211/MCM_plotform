@@ -587,7 +587,7 @@ export default function AdminPage() {
   // ===== AI 评审操作函数 =====
   const runAiReviewFor = async (sub: any) => {
     if (!sub?.id) return;
-    if (!/\.pdf$/i.test(sub.fileName || '')) { setMessage('AI 评审仅支持 PDF 文件'); return; }
+    if (!/\.(pdf|docx)$/i.test(sub.fileName || '')) { setMessage('AI 评审仅支持 PDF / DOCX 文件'); return; }
     if (aiRunningId) return;
     setAiRunningId(sub.id);
     setMessage(`正在对「${sub.fileName}」运行 AI 评审，请稍候…`);

@@ -1,4 +1,4 @@
-// AI 评审核心：解析 PDF、调用 OpenAI 兼容接口、解析模型返回的 JSON。
+// AI 评审核心：解析 PDF/DOCX、调用 OpenAI 兼容接口、解析模型返回的 JSON。
 // 与具体业务解耦：纯函数 + 一个 runAiReview 编排函数。
 
 import fs from 'fs';
@@ -9,7 +9,12 @@ import prisma from './prisma';
 // v2.x 的 pdfjs-dist 在 Next.js 服务端打包下会崩（缺 Node polyfill），故固定到 v1。
 import pdfParse from 'pdf-parse/lib/pdf-parse.js';
 
+// mammoth：DOCX -> 纯文本（基于 .docx 内置的 word/document.xml）
+// 比 word-extractor 之类的老牌库更稳
+import mammoth from 'mammoth';
+
 export type PdfMode = 'text' | 'file' | 'auto';
+export type DocumentKind = 'pdf' | 'docx';
 
 export interface AiConfigLike {
   enabled: boolean;
@@ -64,6 +69,37 @@ export async function readPdfAsDataUrl(absPath: string): Promise<string> {
   return 'data:application/pdf;base64,' + buf.toString('base64');
 }
 
+// DOCX -> 纯文本（保留段落与表格结构）
+// mammoth 提取的 .txt 会保留换行；图片/批注会丢弃
+export async function extractDocxText(absPath: string): Promise<{ text: string; paragraphs: number }> {
+  const result = await mammoth.extractRawText({ path: absPath });
+  const text = String(result?.value || '');
+  const paragraphs = text ? text.split(/\n+/).filter(Boolean).length : 0;
+  return { text, paragraphs };
+}
+
+// 按文件名判断文档类型（AI 评审入口）
+export function detectDocumentKind(fileName: string): DocumentKind {
+  const lower = (fileName || '').toLowerCase();
+  if (/\.pdf$/i.test(lower)) return 'pdf';
+  if (/\.docx$/i.test(lower)) return 'docx';
+  // 其它类型暂不支持
+  return 'pdf';
+}
+
+// 统一入口：依据 kind 调用对应解析器；返回与 PDF 解析同构的结果
+export async function extractDocumentText(
+  absPath: string,
+  kind: DocumentKind
+): Promise<{ text: string; meta: Record<string, any> }> {
+  if (kind === 'docx') {
+    const { text, paragraphs } = await extractDocxText(absPath);
+    return { text, meta: { kind: 'docx', paragraphs } };
+  }
+  const { text, pages } = await extractPdfText(absPath);
+  return { text, meta: { kind: 'pdf', pages } };
+}
+
 function clampText(s: string, max: number) {
   if (!s) return '';
   if (s.length <= max) return s;
@@ -84,13 +120,17 @@ export function buildPrompt(
   config: AiConfigLike,
   competition: CompetitionLike,
   submission: SubmissionLike,
-  pdfText: string
+  documentText: string
 ) {
   const competitionBlock = buildCompetitionBlock(competition);
-  const userPrompt = config.userPromptTpl
+  // 兼容老占位符 {pdfContent} —— 老用户配置里这么写不会失效
+  let userPrompt = config.userPromptTpl || '';
+  userPrompt = userPrompt
     .replace('{competition}', competitionBlock)
-    .replace('{fileName}', submission.fileName || '论文.pdf')
-    .replace('{pdfContent}', clampText(pdfText, DEFAULT_PDF_TEXT_LIMIT));
+    .replace('{fileName}', submission.fileName || '论文')
+    .replace('{pdfContent}', clampText(documentText, DEFAULT_PDF_TEXT_LIMIT))
+    .replace('{document}', clampText(documentText, DEFAULT_PDF_TEXT_LIMIT))
+    .replace('{content}', clampText(documentText, DEFAULT_PDF_TEXT_LIMIT));
   return { system: config.systemPrompt, user: userPrompt };
 }
 
@@ -234,8 +274,9 @@ export function resolvePdfMode(config: AiConfigLike): PdfMode {
   return 'text';
 }
 
-function isPdfFile(fileName: string) {
-  return /\.pdf$/i.test(fileName || '');
+// AI 评审支持的文件扩展名（PDF 文本 / DOCX 文本；多模态 file 模式只对 PDF 有意义）
+function isAiSupportedFile(fileName: string) {
+  return /\.(pdf|docx)$/i.test(fileName || '');
 }
 
 export interface RunOptions {
@@ -252,8 +293,8 @@ export async function runAiReview(
     include: { competition: true },
   });
   if (!submission) throw new Error('提交不存在');
-  if (!isPdfFile(submission.fileName)) {
-    throw new Error('AI 评审仅支持 PDF 文件，请先确保参赛者提交 PDF');
+  if (!isAiSupportedFile(submission.fileName)) {
+    throw new Error('AI 评审仅支持 PDF / DOCX 文件，请先确保参赛者提交对应格式');
   }
 
   const config = await (prisma as any).aiConfig.findUnique({ where: { id: 'default' } });
@@ -261,7 +302,10 @@ export async function runAiReview(
   if (!config.enabled) throw new Error('AI 评审未启用，请在后台开启');
   if (!config.apiKey) throw new Error('AI apiKey 未配置');
 
+  const kind = detectDocumentKind(submission.fileName);
   const mode = resolvePdfMode(config);
+  // DOCX 文本提取是稳定的，多模态 file 模式对 docx 意义不大（主流 OpenAI 兼容接口仅 PDF 支持 file）
+  const effectiveMode: PdfMode = (kind === 'docx' && mode === 'file') ? 'text' : mode;
 
   // 先创建 pending 记录
   const review = await (prisma as any).aiReview.create({
@@ -272,7 +316,7 @@ export async function runAiReview(
       triggeredBy: options.adminId,
       status: 'pending',
       model: config.model,
-      pdfMode: mode,
+      pdfMode: effectiveMode,
       baseUrl: config.baseUrl,
     },
   });
@@ -289,8 +333,8 @@ export async function runAiReview(
 
     const messages: ChatMessage[] = [{ role: 'system', content: system }];
 
-    if (mode === 'file') {
-      // 多模态：把 PDF 作为 file 输入
+    if (effectiveMode === 'file') {
+      // 多模态：仅 PDF 走 file；DOCX 已被上面降级为 text
       const dataUrl = await readPdfAsDataUrl(abs);
       const promptWithFileNote = user + '\n\n（附件为参赛论文 PDF，请直接阅读并评审）';
       messages.push({
@@ -308,16 +352,17 @@ export async function runAiReview(
       } catch { /* 文件可能已被清理，记成 ? 即可 */ }
       await (prisma as any).aiReview.update({
         where: { id: review.id },
-        data: { requestSummary: `pdfMode=file; size=${pdfSizeKb}KB` },
+        data: { requestSummary: `pdfMode=file; kind=${kind}; size=${pdfSizeKb}KB` },
       });
     } else {
-      // 文本模式
-      const { text: pdfText, pages } = await extractPdfText(abs);
-      const text = buildPrompt(config as any, submission.competition as any, submission as any, pdfText).user;
+      // 文本模式：PDF / DOCX 都走这里
+      const { text: docText, meta } = await extractDocumentText(abs, kind);
+      const text = buildPrompt(config as any, submission.competition as any, submission as any, docText).user;
       messages.push({ role: 'user', content: text });
+      const summary = `pdfMode=text; kind=${kind}; textLen=${docText.length}; ${meta.kind === 'pdf' ? `pages=${meta.pages}` : `paragraphs=${meta.paragraphs}`}`;
       await (prisma as any).aiReview.update({
         where: { id: review.id },
-        data: { requestSummary: `pdfMode=text; pages=${pages}; textLen=${pdfText.length}` },
+        data: { requestSummary: summary },
       });
     }
 
